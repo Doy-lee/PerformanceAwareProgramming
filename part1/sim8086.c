@@ -31,7 +31,7 @@ S86_Globals s86_globals;
 #define S86_STRINGIFY(token) S86_STRINGIFY2(token)
 #define S86_ASSERT(expr)                                                                         \
     if (!(expr)) {                                                                               \
-        S86_PrintLnFmt("Assertion triggered [file=" __FILE__ ", line=" S86_STRINGIFY(__LINE__) ", expr=" #expr "]");                                                                     \
+        S86_PrintLnFmt("Assertion triggered [file=\"" __FILE__ ":" S86_STRINGIFY(__LINE__) "\", expr=\"" #expr "\"]");                                                                     \
         __debugbreak();                                                                          \
     }                                                                                            \
 
@@ -40,11 +40,19 @@ S86_Globals s86_globals;
 #define S86_STR8_FMT(string) (int)((string).size), (string).data
 #define S86_CAST(Type) (Type)
 
-S86_Buffer S86_ReadFile(char const *file_path);
+bool S86_BufferIsValid(S86_Buffer buffer);
+S86_Buffer S86_FileRead(char const *file_path);
+void S86_FileFree(S86_Buffer buffer);
 void S86_PrintLn(S86_Str8 string);
 void S86_PrintLnFmt(char const *fmt, ...);
 
-S86_Buffer S86_ReadFile(char const *file_path)
+bool S86_BufferIsValid(S86_Buffer buffer)
+{
+    bool result = buffer.data && buffer.size;
+    return result;
+}
+
+S86_Buffer S86_FileRead(char const *file_path)
 {
     S86_Buffer result = {0};
 
@@ -108,10 +116,10 @@ end:
     return result;
 };
 
-bool S86_BufferIsValid(S86_Buffer buffer)
+void S86_FileFree(S86_Buffer buffer)
 {
-    bool result = buffer.data && buffer.size;
-    return result;
+    if (S86_BufferIsValid(buffer))
+        VirtualFree(buffer.data, 0, MEM_RELEASE);
 }
 
 void S86_PrintLn(S86_Str8 string)
@@ -242,7 +250,7 @@ int main(int argc, char **argv)
     };
 
     char const *file_path = argv[1];
-    S86_Buffer buffer     = S86_ReadFile(file_path);
+    S86_Buffer buffer     = S86_FileRead(file_path);
     if (!S86_BufferIsValid(buffer)) {
         S86_PrintLnFmt("File read failed [path=\"%s\"]", argv[1], buffer.size);
         return -1;
@@ -256,70 +264,77 @@ int main(int argc, char **argv)
         uint8_t byte1      = (uint8_t)buffer.data[buffer_index + 1];
         uint16_t byte01 = (uint16_t)byte0 << 8 | (uint16_t)byte1 << 0;
 
+        S86_InstructionType instruction_type = S86_InstructionType_Count;
         for (size_t instruction_index = 0;
-             instruction_index < S86_ARRAY_UCOUNT(S86_INSTRUCTIONS);
+             instruction_type == S86_InstructionType_Count && instruction_index < S86_ARRAY_UCOUNT(S86_INSTRUCTIONS);
              instruction_index++)
         {
             S86_Instruction instruction = S86_INSTRUCTIONS[instruction_index];
-            if ((byte01 & instruction.op_mask) != instruction.op_bits)
-                continue;
+            if ((byte01 & instruction.op_mask) == instruction.op_bits)
+                instruction_type = instruction_index;
+        }
 
-            S86_InstructionType type = S86_CAST(S86_InstructionType)instruction_index;
-            switch (type) {
-                case S86_InstructionType_MOVRegOrMemToOrFromReg: {
-                    uint8_t d   = (byte0 & 0b0000'0010) >> 1;
-                    uint8_t w   = (byte0 & 0b0000'0001) >> 0;
-                    uint8_t mod = (byte1 & 0b1100'0000) >> 6;
-                    uint8_t reg = (byte1 & 0b0011'1000) >> 3;
-                    uint8_t rm  = (byte1 & 0b0000'0111) >> 0;
-                    S86_ASSERT(d   < 2);
-                    S86_ASSERT(w   < 2);
-                    S86_ASSERT(mod < 4);
-                    S86_ASSERT(reg < 8);
-                    S86_ASSERT(rm  < 8);
+        S86_ASSERT(instruction_type != S86_InstructionType_Count && "Unknown instruction");
+        switch (instruction_type) {
+            case S86_InstructionType_MOVRegOrMemToOrFromReg: {
+                uint8_t d   = (byte0 & 0b0000'0010) >> 1;
+                uint8_t w   = (byte0 & 0b0000'0001) >> 0;
+                uint8_t mod = (byte1 & 0b1100'0000) >> 6;
+                uint8_t reg = (byte1 & 0b0011'1000) >> 3;
+                uint8_t rm  = (byte1 & 0b0000'0111) >> 0;
+                S86_ASSERT(d   < 2);
+                S86_ASSERT(w   < 2);
+                S86_ASSERT(mod < 4);
+                S86_ASSERT(reg < 8);
+                S86_ASSERT(rm  < 8);
 
-                    uint8_t instr_dest = d ? reg : rm;
-                    uint8_t instr_src  = d ? rm  : reg;
+                uint8_t instr_dest = d ? reg : rm;
+                uint8_t instr_src  = d ? rm  : reg;
 
-                    // S86_OpDataSize data_size = w ? S86_OpDataSize_Word : S86_OpDataSize_Byte;
-                    S86_ASSERT(mod == 0b11); // register-to-register
+                // S86_OpDataSize data_size = w ? S86_OpDataSize_Word : S86_OpDataSize_Byte;
+                S86_ASSERT(mod == 0b11); // register-to-register
 
-                    S86_Str8 src_register  = REGISTER_FIELD_ENCODING[w][instr_src];
-                    S86_Str8 dest_register = REGISTER_FIELD_ENCODING[w][instr_dest];
+                S86_Str8 src_register  = REGISTER_FIELD_ENCODING[w][instr_src];
+                S86_Str8 dest_register = REGISTER_FIELD_ENCODING[w][instr_dest];
 
-                    S86_PrintLnFmt("mov %.*s, %.*s", S86_STR8_FMT(dest_register), S86_STR8_FMT(src_register));
+                S86_PrintLnFmt("mov %.*s, %.*s", S86_STR8_FMT(dest_register), S86_STR8_FMT(src_register));
 
-                    #if 0
-                    if (mod == 0b01) {
-                        // 8 bit displacement
-                    } else if (mode == 0b10) {
-                        // 16 bit displacement
-                    }
-                    #endif
-                } break;
+                #if 0
+                if (mod == 0b01) {
+                    // 8 bit displacement
+                } else if (mode == 0b10) {
+                    // 16 bit displacement
+                }
+                #endif
+            } break;
 
-                case S86_InstructionType_MOVImmediateToRegOrMem: {
-                } break;
+            case S86_InstructionType_MOVImmediateToRegOrMem: {
+                S86_ASSERT(!"Unhandled instruction");
+            } break;
 
-                case S86_InstructionType_MOVImmediateToReg: {
-                } break;
+            case S86_InstructionType_MOVImmediateToReg: {
+                S86_ASSERT(!"Unhandled instruction");
+            } break;
 
-                case S86_InstructionType_MOVMemToAccum: {
-                } break;
+            case S86_InstructionType_MOVMemToAccum: {
+                S86_ASSERT(!"Unhandled instruction");
+            } break;
 
-                case S86_InstructionType_MOVAccumToMem: {
-                } break;
+            case S86_InstructionType_MOVAccumToMem: {
+                S86_ASSERT(!"Unhandled instruction");
+            } break;
 
-                case S86_InstructionType_MOVRegOrMemToSegReg: {
-                } break;
+            case S86_InstructionType_MOVRegOrMemToSegReg: {
+                S86_ASSERT(!"Unhandled instruction");
+            } break;
 
-                case S86_InstructionType_MOVSegRegToRegOrMem: {
-                } break;
+            case S86_InstructionType_MOVSegRegToRegOrMem: {
+                S86_ASSERT(!"Unhandled instruction");
+            } break;
 
-                default: {
-                    S86_ASSERT(!"Unknown instruction");
-                } break;
-            }
+            default: {
+                S86_ASSERT(!"Unknown instruction");
+            } break;
         }
     }
 }
