@@ -189,33 +189,89 @@ enum S86_InstructionType {
 
 typedef struct S86_Instruction S86_Instruction;
 struct S86_Instruction {
-    uint16_t op_mask;
-    uint16_t op_bits;
+    uint8_t op_mask0;
+    uint8_t op_bits0;
+    uint8_t op_mask1;
+    uint8_t op_bits1;
 } S86_INSTRUCTIONS[S86_InstructionType_Count] = {
-    [S86_InstructionType_MOVRegOrMemToOrFromReg] = {.op_mask = 0b1111'1100'0000'0000,
-                                                    .op_bits = 0b1000'1000'0000'0000},
+    [S86_InstructionType_MOVRegOrMemToOrFromReg] = {.op_mask0 = 0b1111'1100,
+                                                    .op_bits0 = 0b1000'1000,
+                                                    .op_mask1 = 0b0000'0000,
+                                                    .op_bits1 = 0b0000'0000},
 
-    [S86_InstructionType_MOVImmediateToRegOrMem] = {.op_mask = 0b1111'1110'0011'1000,
-                                                    .op_bits = 0b1100'0110'0000'0000},
+    [S86_InstructionType_MOVImmediateToRegOrMem] = {.op_mask0 = 0b1111'1110,
+                                                    .op_bits0 = 0b1100'0110,
+                                                    .op_mask1 = 0b0011'1000,
+                                                    .op_bits1 = 0b0000'0000},
 
-    [S86_InstructionType_MOVImmediateToReg]      = {.op_mask = 0b1111'0000'0000'0000,
-                                                    .op_bits = 0b1011'0000'0000'0000},
+    [S86_InstructionType_MOVImmediateToReg]      = {.op_mask0 = 0b1111'0000,
+                                                    .op_bits0 = 0b1011'0000,
+                                                    .op_mask1 = 0b0000'0000,
+                                                    .op_bits1 = 0b0000'0000},
 
-    [S86_InstructionType_MOVMemToAccum]          = {.op_mask = 0b1111'1110'0000'0000,
-                                                    .op_bits = 0b1010'0000'0000'0000},
+    [S86_InstructionType_MOVMemToAccum]          = {.op_mask0 = 0b1111'1110,
+                                                    .op_bits0 = 0b1010'0000,
+                                                    .op_mask1 = 0b0000'0000,
+                                                    .op_bits1 = 0b0000'0000},
 
-    [S86_InstructionType_MOVAccumToMem]          = {.op_mask = 0b1111'1110'0000'0000,
-                                                    .op_bits = 0b1010'0010'0000'0000},
+    [S86_InstructionType_MOVAccumToMem]          = {.op_mask0 = 0b1111'1110,
+                                                    .op_bits0 = 0b1010'0010,
+                                                    .op_mask1 = 0b0000'0000,
+                                                    .op_bits1 = 0b0000'0000},
 
-    [S86_InstructionType_MOVRegOrMemToSegReg]    = {.op_mask = 0b1111'1111'0010'0000,
-                                                    .op_bits = 0b1000'1110'0000'0000},
+    [S86_InstructionType_MOVRegOrMemToSegReg]    = {.op_mask0 = 0b1111'1111,
+                                                    .op_bits0 = 0b1000'1110,
+                                                    .op_mask1 = 0b0010'0000,
+                                                    .op_bits1 = 0b0000'0000},
 
-    [S86_InstructionType_MOVSegRegToRegOrMem]    = {.op_mask = 0b1111'1111'0010'0000,
-                                                    .op_bits = 0b1000'1100'0000'0000},
+    [S86_InstructionType_MOVSegRegToRegOrMem]    = {.op_mask0 = 0b1111'1111,
+                                                    .op_bits0 = 0b1000'1100,
+                                                    .op_mask1 = 0b0010'0000,
+                                                    .op_bits1 = 0b0000'0000},
 };
 
 typedef enum S86_OpDataSize S86_OpDataSize;
 enum S86_OpDataSize { S86_OpDataSize_Byte, S86_OpDataSize_Word };
+
+typedef struct S86_InstructionStream {
+    uint8_t bytes[6];
+    uint8_t size;
+} S86_InstructionStream;
+
+typedef struct S86_BufferIterator {
+    S86_Buffer buffer;
+    size_t     index;
+} S86_BufferIterator;
+
+S86_BufferIterator S86_BufferIteratorInit(S86_Buffer buffer)
+{
+    S86_BufferIterator result = {0};
+    result.buffer             = buffer;
+    return result;
+}
+
+bool S86_BufferIteratorHasMoreBytes(S86_BufferIterator it)
+{
+    bool result = S86_BufferIsValid(it.buffer) && it.index < it.buffer.size;
+    return result;
+}
+
+uint8_t S86_BufferIteratorPeekByte(S86_BufferIterator it)
+{
+    S86_ASSERT(S86_BufferIsValid(it.buffer));
+    S86_ASSERT(it.index < it.buffer.size);
+    uint8_t result = it.buffer.data[it.index];
+    return result;
+}
+
+uint8_t S86_BufferIteratorNextByte(S86_BufferIterator *it)
+{
+    S86_ASSERT(it);
+    S86_ASSERT(S86_BufferIsValid(it->buffer));
+    S86_ASSERT(it->index < it->buffer.size);
+    uint8_t result = it->buffer.data[it->index++];
+    return result;
+}
 
 int main(int argc, char **argv)
 {
@@ -257,31 +313,58 @@ int main(int argc, char **argv)
     }
 
     S86_PrintLn(S86_STR8("bits 16"));
-    S86_ASSERT(buffer.size % 2 == 0); // We expect 2 byte instructions
+    S86_BufferIterator buffer_it = S86_BufferIteratorInit(buffer);
+    while (S86_BufferIteratorHasMoreBytes(buffer_it)) {
 
-    for (size_t buffer_index = 0; buffer_index < buffer.size; buffer_index += 2) {
-        uint8_t byte0   = (uint8_t)buffer.data[buffer_index + 0];
-        uint8_t byte1   = (uint8_t)buffer.data[buffer_index + 1];
-        uint16_t byte01 = (uint16_t)byte0 << 8 | (uint16_t)byte1 << 0;
+        S86_InstructionStream stream = {0};
+        stream.bytes[stream.size++] = S86_BufferIteratorNextByte(&buffer_it);
 
-        S86_InstructionType instruction_type = S86_InstructionType_Count;
+        // NOTE: Match the assembly bytes to the desired instruction
+        // =====================================================================
+        S86_InstructionType    instruction_type = S86_InstructionType_Count;
+        S86_Instruction const *instruction      = NULL;
         for (size_t instruction_index = 0;
              instruction_type == S86_InstructionType_Count && instruction_index < S86_ARRAY_UCOUNT(S86_INSTRUCTIONS);
              instruction_index++)
         {
-            S86_Instruction instruction = S86_INSTRUCTIONS[instruction_index];
-            if ((byte01 & instruction.op_mask) == instruction.op_bits)
+            S86_Instruction *item = S86_INSTRUCTIONS + instruction_index;
+
+            // NOTE: Check first instruction byte
+            // =================================================================
+            if ((stream.bytes[0] & item->op_mask0) != item->op_bits0)
+                continue;
+
+            // NOTE Check multi-byte instruction
+            // =================================================================
+            // If the matched instruction has a bit mask for the 2nd byte, this
+            // is a multi-byte instruction. Check if the 2nd byte checks out.
+            bool instruction_matched = true;
+            if (item->op_mask1) {
+                // TODO: This assumes the iterator is valid
+                stream.bytes[stream.size++] = S86_BufferIteratorNextByte(&buffer_it);
+                instruction_matched         = (stream.bytes[stream.size - 1] & item->op_mask1) == item->op_bits1;
+            }
+
+            if (instruction_matched) {
                 instruction_type = instruction_index;
+                instruction      = item;
+            }
         }
 
+        // NOTE: Disassemble bytes to assembly mnemonics
+        // =================================================================
         S86_ASSERT(instruction_type != S86_InstructionType_Count && "Unknown instruction");
         switch (instruction_type) {
             case S86_InstructionType_MOVRegOrMemToOrFromReg: {
-                uint8_t d   = (byte0 & 0b0000'0010) >> 1;
-                uint8_t w   = (byte0 & 0b0000'0001) >> 0;
-                uint8_t mod = (byte1 & 0b1100'0000) >> 6;
-                uint8_t reg = (byte1 & 0b0011'1000) >> 3;
-                uint8_t rm  = (byte1 & 0b0000'0111) >> 0;
+                // NOTE: Instruction does not have opcode bits in the 2nd byte
+                S86_ASSERT(stream.size == 1);
+                stream.bytes[stream.size++] = S86_BufferIteratorNextByte(&buffer_it);
+
+                uint8_t d   = (stream.bytes[0] & 0b0000'0010) >> 1;
+                uint8_t w   = (stream.bytes[0] & 0b0000'0001) >> 0;
+                uint8_t mod = (stream.bytes[1] & 0b1100'0000) >> 6;
+                uint8_t reg = (stream.bytes[1] & 0b0011'1000) >> 3;
+                uint8_t rm  = (stream.bytes[1] & 0b0000'0111) >> 0;
                 S86_ASSERT(d   < 2);
                 S86_ASSERT(w   < 2);
                 S86_ASSERT(mod < 4);
@@ -309,11 +392,72 @@ int main(int argc, char **argv)
             } break;
 
             case S86_InstructionType_MOVImmediateToRegOrMem: {
+                S86_ASSERT(stream.size == 2);
+                uint8_t w   = (stream.bytes[0] & 0b0000'0001) >> 0;
+                uint8_t mod = (stream.bytes[1] & 0b1100'0000) >> 6;
+                uint8_t rm  = (stream.bytes[1] & 0b0000'0111) >> 0;
+
+                uint16_t displacement = 0;
+                if (mod == 0b01) {
+                    // 8 bit displacement
+                    stream.bytes[stream.size++] = S86_BufferIteratorNextByte(&buffer_it);
+                    displacement = stream.bytes[stream.size - 1];
+                } else if (mod == 0b10) {
+                    // 16 bit displacement
+                    stream.bytes[stream.size++] = S86_BufferIteratorNextByte(&buffer_it);
+                    stream.bytes[stream.size++] = S86_BufferIteratorNextByte(&buffer_it);
+                    displacement = (uint16_t)stream.bytes[2] << 0 | (uint16_t)stream.bytes[3] << 8;
+                } else {
+                    // NOTE: We can't have register-to-register (mod == 0b11)
+                    // as this instruction is an immediate to register/memory
+                    S86_ASSERT(mod == 0b00);
+                }
+
+                stream.bytes[stream.size++] = S86_BufferIteratorNextByte(&buffer_it);
+                uint16_t data = stream.bytes[stream.size - 1];
+
+                if (w) { // 16 bit data
+                    stream.bytes[stream.size++] = S86_BufferIteratorNextByte(&buffer_it);
+                    data |= (uint16_t)(stream.bytes[stream.size - 1]) << 8;
+                }
+
+                S86_Str8 effective_address_registers;
+                switch (rm) {
+                    case 0b000: effective_address_registers = S86_STR8("bx + si"); break;
+                    case 0b001: effective_address_registers = S86_STR8("bx + di"); break;
+                    case 0b010: effective_address_registers = S86_STR8("bp + si"); break;
+                    case 0b011: effective_address_registers = S86_STR8("bp + di"); break;
+                    case 0b100: effective_address_registers = S86_STR8("si"); break;
+                    case 0b101: effective_address_registers = S86_STR8("di"); break;
+                    case 0b110: effective_address_registers = S86_STR8("??"); S86_ASSERT(!"Unhandled instruction"); break;
+                    case 0b111: effective_address_registers = S86_STR8("bx"); break;
+                    default: S86_ASSERT(!"Invalid rm value, must be 3 bits"); break;
+                }
+
                 S86_ASSERT(!"Unhandled instruction");
             } break;
 
             case S86_InstructionType_MOVImmediateToReg: {
-                S86_ASSERT(!"Unhandled instruction");
+                // NOTE: Parse opcode control bits
+                // =============================================================
+                S86_ASSERT(stream.size == 1);
+                uint8_t w   = (stream.bytes[0] & 0b0000'1000) >> 4;
+                uint8_t reg = (stream.bytes[0] & 0b0000'0111) >> 0;
+
+                // NOTE: Parse data payload
+                // =============================================================
+                stream.bytes[stream.size++] = S86_BufferIteratorNextByte(&buffer_it);
+                uint16_t data = stream.bytes[stream.size - 1];
+
+                if (w) { // 16 bit data
+                    stream.bytes[stream.size++] = S86_BufferIteratorNextByte(&buffer_it);
+                    data |= (uint16_t)(stream.bytes[stream.size - 1]) << 8;
+                }
+
+                // NOTE: Disassemble
+                // =============================================================
+                S86_Str8 dest_register = REGISTER_FIELD_ENCODING[w][reg];
+                S86_PrintLnFmt("mov %.*s, %u", S86_STR8_FMT(dest_register), data);
             } break;
 
             case S86_InstructionType_MOVMemToAccum: {
