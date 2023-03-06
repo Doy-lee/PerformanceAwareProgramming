@@ -22,15 +22,27 @@ struct S86_Str8 {
 typedef struct S86_Globals S86_Globals;
 struct S86_Globals {
     HANDLE stdout_handle;
+    bool   write_to_console;
 };
 
 S86_Globals s86_globals;
 
-#define S86_ASSERT(expr) if (!(expr)) { __debugbreak(); }
-#define S86_ARRAY_UCOUNT(array) sizeof((array))/sizeof((array)[0])
+#define S86_STRINGIFY2(token) #token
+#define S86_STRINGIFY(token) S86_STRINGIFY2(token)
+#define S86_ASSERT(expr)                                                                         \
+    if (!(expr)) {                                                                               \
+        S86_PrintLnFmt("Assertion triggered [file=" __FILE__ ", line=" S86_STRINGIFY(__LINE__) ", expr=" #expr "]");                                                                     \
+        __debugbreak();                                                                          \
+    }                                                                                            \
+
+#define S86_ARRAY_UCOUNT(array) sizeof((array)) / sizeof((array)[0])
 #define S86_STR8(string) (S86_Str8){.data = (string), .size = S86_ARRAY_UCOUNT(string) - 1 }
 #define S86_STR8_FMT(string) (int)((string).size), (string).data
 #define S86_CAST(Type) (Type)
+
+S86_Buffer S86_ReadFile(char const *file_path);
+void S86_PrintLn(S86_Str8 string);
+void S86_PrintLnFmt(char const *fmt, ...);
 
 S86_Buffer S86_ReadFile(char const *file_path)
 {
@@ -104,13 +116,27 @@ bool S86_BufferIsValid(S86_Buffer buffer)
 
 void S86_PrintLn(S86_Str8 string)
 {
-    if (s86_globals.stdout_handle == NULL)
+    if (s86_globals.stdout_handle == NULL) {
         s86_globals.stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
+        DWORD mode = 0;
+        BOOL get_console_mode_result = GetConsoleMode(
+          /*HANDLE  hConsoleHandle*/ s86_globals.stdout_handle,
+          /*LPDWORD lpMode*/ &mode
+        );
+        s86_globals.write_to_console = get_console_mode_result != 0;
+    }
+
 
     S86_ASSERT(string.size < S86_CAST(DWORD)-1);
-    DWORD chars_written = 0;
-    WriteConsoleA(s86_globals.stdout_handle, string.data, (DWORD)string.size, &chars_written, NULL);
-    WriteConsoleA(s86_globals.stdout_handle, "\n", 1, &chars_written, NULL);
+    if (s86_globals.write_to_console) {
+        DWORD chars_written = 0;
+        WriteConsoleA(s86_globals.stdout_handle, string.data, (DWORD)string.size, &chars_written, NULL);
+        WriteConsoleA(s86_globals.stdout_handle, "\n", 1, &chars_written, NULL);
+    } else {
+        DWORD bytes_written = 0;
+        WriteFile(s86_globals.stdout_handle, string.data, (DWORD)string.size, &bytes_written, NULL);
+        WriteFile(s86_globals.stdout_handle, "\n", 1, &bytes_written, NULL);
+    }
 }
 
 void S86_PrintLnFmt(char const *fmt, ...)
@@ -141,31 +167,6 @@ enum S86_ModEncoding {
     S86_ModEncoding_RegisterMode      = 0b11,
 };
 
-S86_Str8 REGISTER_FIELD_ENCODING[2][8] = {
-    [0b0] =
-        {
-               S86_STR8("AL"),
-               S86_STR8("CL"),
-               S86_STR8("DL"),
-               S86_STR8("BL"),
-               S86_STR8("AH"),
-               S86_STR8("CH"),
-               S86_STR8("DH"),
-               S86_STR8("BH"),
-        },
-    [0b1] =
-        {
-               S86_STR8("AX"),
-               S86_STR8("CX"),
-               S86_STR8("DX"),
-               S86_STR8("BX"),
-               S86_STR8("SP"),
-               S86_STR8("BP"),
-               S86_STR8("SI"),
-               S86_STR8("DI"),
-         },
-};
-
 typedef enum S86_InstructionType S86_InstructionType;
 enum S86_InstructionType {
     S86_InstructionType_MOVRegOrMemToOrFromReg,
@@ -183,13 +184,26 @@ struct S86_Instruction {
     uint16_t op_mask;
     uint16_t op_bits;
 } S86_INSTRUCTIONS[S86_InstructionType_Count] = {
-    [S86_InstructionType_MOVRegOrMemToOrFromReg] = {.op_mask = 0b1111'1100'0000'0000, .op_bits = 0b1000'1000'0000'0000},
-    [S86_InstructionType_MOVImmediateToRegOrMem] = {.op_mask = 0b1111'1110'0011'1000, .op_bits = 0b1100'0110'0000'0000},
-    [S86_InstructionType_MOVImmediateToReg]      = {.op_mask = 0b1111'0000'0000'0000, .op_bits = 0b1011'0000'0000'0000},
-    [S86_InstructionType_MOVMemToAccum]          = {.op_mask = 0b1111'1110'0000'0000, .op_bits = 0b1010'0000'0000'0000},
-    [S86_InstructionType_MOVAccumToMem]          = {.op_mask = 0b1111'1110'0000'0000, .op_bits = 0b1010'0010'0000'0000},
-    [S86_InstructionType_MOVRegOrMemToSegReg]    = {.op_mask = 0b1111'1111'0010'0000, .op_bits = 0b1000'1110'0000'0000},
-    [S86_InstructionType_MOVSegRegToRegOrMem]    = {.op_mask = 0b1111'1111'0010'0000, .op_bits = 0b1000'1100'0000'0000},
+    [S86_InstructionType_MOVRegOrMemToOrFromReg] = {.op_mask = 0b1111'1100'0000'0000,
+                                                    .op_bits = 0b1000'1000'0000'0000},
+
+    [S86_InstructionType_MOVImmediateToRegOrMem] = {.op_mask = 0b1111'1110'0011'1000,
+                                                    .op_bits = 0b1100'0110'0000'0000},
+
+    [S86_InstructionType_MOVImmediateToReg]      = {.op_mask = 0b1111'0000'0000'0000,
+                                                    .op_bits = 0b1011'0000'0000'0000},
+
+    [S86_InstructionType_MOVMemToAccum]          = {.op_mask = 0b1111'1110'0000'0000,
+                                                    .op_bits = 0b1010'0000'0000'0000},
+
+    [S86_InstructionType_MOVAccumToMem]          = {.op_mask = 0b1111'1110'0000'0000,
+                                                    .op_bits = 0b1010'0010'0000'0000},
+
+    [S86_InstructionType_MOVRegOrMemToSegReg]    = {.op_mask = 0b1111'1111'0010'0000,
+                                                    .op_bits = 0b1000'1110'0000'0000},
+
+    [S86_InstructionType_MOVSegRegToRegOrMem]    = {.op_mask = 0b1111'1111'0010'0000,
+                                                    .op_bits = 0b1000'1100'0000'0000},
 };
 
 typedef enum S86_OpDataSize S86_OpDataSize;
@@ -202,6 +216,31 @@ int main(int argc, char **argv)
         return -1;
     }
 
+    S86_Str8 const REGISTER_FIELD_ENCODING[2][8] = {
+        [0b0] =
+            {
+                   S86_STR8("al"),
+                   S86_STR8("cl"),
+                   S86_STR8("dl"),
+                   S86_STR8("bl"),
+                   S86_STR8("ah"),
+                   S86_STR8("ch"),
+                   S86_STR8("dh"),
+                   S86_STR8("bh"),
+            },
+        [0b1] =
+            {
+                   S86_STR8("ax"),
+                   S86_STR8("cx"),
+                   S86_STR8("dx"),
+                   S86_STR8("bx"),
+                   S86_STR8("sp"),
+                   S86_STR8("bp"),
+                   S86_STR8("si"),
+                   S86_STR8("di"),
+             },
+    };
+
     char const *file_path = argv[1];
     S86_Buffer buffer     = S86_ReadFile(file_path);
     if (!S86_BufferIsValid(buffer)) {
@@ -209,10 +248,12 @@ int main(int argc, char **argv)
         return -1;
     }
 
+    S86_PrintLn(S86_STR8("bits 16"));
     S86_ASSERT(buffer.size % 2 == 0); // We expect 2 byte instructions
+
     for (size_t buffer_index = 0; buffer_index < (buffer.size / 2); buffer_index++) {
-        char byte0      = buffer.data[buffer_index + 0];
-        char byte1      = buffer.data[buffer_index + 1];
+        uint8_t byte0      = (uint8_t)buffer.data[buffer_index + 0];
+        uint8_t byte1      = (uint8_t)buffer.data[buffer_index + 1];
         uint16_t byte01 = (uint16_t)byte0 << 8 | (uint16_t)byte1 << 0;
 
         for (size_t instruction_index = 0;
@@ -231,17 +272,22 @@ int main(int argc, char **argv)
                     uint8_t mod = (byte1 & 0b1100'0000) >> 6;
                     uint8_t reg = (byte1 & 0b0011'1000) >> 3;
                     uint8_t rm  = (byte1 & 0b0000'0111) >> 0;
+                    S86_ASSERT(d   < 2);
+                    S86_ASSERT(w   < 2);
+                    S86_ASSERT(mod < 4);
+                    S86_ASSERT(reg < 8);
+                    S86_ASSERT(rm  < 8);
 
                     uint8_t instr_dest = d ? reg : rm;
                     uint8_t instr_src  = d ? rm  : reg;
 
-                    S86_OpDataSize data_size = w ? S86_OpDataSize_Word : S86_OpDataSize_Byte;
+                    // S86_OpDataSize data_size = w ? S86_OpDataSize_Word : S86_OpDataSize_Byte;
                     S86_ASSERT(mod == 0b11); // register-to-register
 
                     S86_Str8 src_register  = REGISTER_FIELD_ENCODING[w][instr_src];
                     S86_Str8 dest_register = REGISTER_FIELD_ENCODING[w][instr_dest];
 
-                    S86_PrintLnFmt("MOV %.*s %.*s", S86_STR8_FMT(src_register), S86_STR8_FMT(dest_register));
+                    S86_PrintLnFmt("mov %.*s, %.*s", S86_STR8_FMT(dest_register), S86_STR8_FMT(src_register));
 
                     #if 0
                     if (mod == 0b01) {
