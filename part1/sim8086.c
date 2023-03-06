@@ -259,9 +259,9 @@ int main(int argc, char **argv)
     S86_PrintLn(S86_STR8("bits 16"));
     S86_ASSERT(buffer.size % 2 == 0); // We expect 2 byte instructions
 
-    for (size_t buffer_index = 0; buffer_index < (buffer.size / 2); buffer_index++) {
-        uint8_t byte0      = (uint8_t)buffer.data[buffer_index + 0];
-        uint8_t byte1      = (uint8_t)buffer.data[buffer_index + 1];
+    for (size_t buffer_index = 0; buffer_index < buffer.size; buffer_index += 2) {
+        uint8_t byte0   = (uint8_t)buffer.data[buffer_index + 0];
+        uint8_t byte1   = (uint8_t)buffer.data[buffer_index + 1];
         uint16_t byte01 = (uint16_t)byte0 << 8 | (uint16_t)byte1 << 0;
 
         S86_InstructionType instruction_type = S86_InstructionType_Count;
