@@ -441,23 +441,23 @@ int main(int argc, char **argv)
                 // NOTE: Parse opcode control bits
                 // =============================================================
                 S86_ASSERT(stream.size == 1);
-                uint8_t w   = (stream.bytes[0] & 0b0000'1000) >> 4;
+                uint8_t w   = (stream.bytes[0] & 0b0000'1000) >> 3;
                 uint8_t reg = (stream.bytes[0] & 0b0000'0111) >> 0;
 
                 // NOTE: Parse data payload
                 // =============================================================
                 stream.bytes[stream.size++] = S86_BufferIteratorNextByte(&buffer_it);
-                uint16_t data = stream.bytes[stream.size - 1];
+                int16_t data = stream.bytes[stream.size - 1];
 
                 if (w) { // 16 bit data
                     stream.bytes[stream.size++] = S86_BufferIteratorNextByte(&buffer_it);
-                    data |= (uint16_t)(stream.bytes[stream.size - 1]) << 8;
+                    data |= (int16_t)(stream.bytes[stream.size - 1]) << 8;
                 }
 
                 // NOTE: Disassemble
                 // =============================================================
                 S86_Str8 dest_register = REGISTER_FIELD_ENCODING[w][reg];
-                S86_PrintLnFmt("mov %.*s, %u", S86_STR8_FMT(dest_register), data);
+                S86_PrintLnFmt("mov %.*s, %d", S86_STR8_FMT(dest_register), data);
             } break;
 
             case S86_InstructionType_MOVMemToAccum: {
