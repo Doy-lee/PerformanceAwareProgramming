@@ -7,31 +7,8 @@
 #include <stdarg.h>
 #include <stdbool.h>
 
-typedef struct S86_Buffer S86_Buffer;
-struct S86_Buffer {
-    char *data;
-    size_t size;
-};
-
-typedef struct S86_Str8 S86_Str8;
-struct S86_Str8 {
-    char *data;
-    size_t size;
-};
-
-typedef struct S86_Globals S86_Globals;
-struct S86_Globals {
-    HANDLE stdout_handle;
-    bool   write_to_console;
-};
-
-typedef struct S86_BufferIterator {
-    S86_Buffer buffer;
-    size_t     index;
-} S86_BufferIterator;
-
-S86_Globals s86_globals;
-
+// NOTE: Macros
+// ============================================================================
 #define S86_STRINGIFY2(token) #token
 #define S86_STRINGIFY(token) S86_STRINGIFY2(token)
 #define S86_ASSERT(expr)                                                                         \
@@ -41,9 +18,38 @@ S86_Globals s86_globals;
     }                                                                                            \
 
 #define S86_ARRAY_UCOUNT(array) sizeof((array)) / sizeof((array)[0])
+#define S86_CAST(Type) (Type)
+
+// NOTE: Globals
+// ============================================================================
+typedef struct S86_Globals {
+    HANDLE stdout_handle;
+    bool   write_to_console;
+} S86_Globals;
+
+S86_Globals s86_globals;
+
+// NOTE: Strings
+// ============================================================================
+typedef struct S86_Str8 {
+    char *data;
+    size_t size;
+} S86_Str8;
+
 #define S86_STR8(string) (S86_Str8){.data = (string), .size = S86_ARRAY_UCOUNT(string) - 1 }
 #define S86_STR8_FMT(string) (int)((string).size), (string).data
-#define S86_CAST(Type) (Type)
+
+// NOTE: Buffer
+// ============================================================================
+typedef struct S86_Buffer {
+    char *data;
+    size_t size;
+} S86_Buffer;
+
+typedef struct S86_BufferIterator {
+    S86_Buffer buffer;
+    size_t     index;
+} S86_BufferIterator;
 
 bool S86_BufferIsValid(S86_Buffer buffer);
 S86_BufferIterator S86_BufferIteratorInit(S86_Buffer buffer);
@@ -51,11 +57,82 @@ bool S86_BufferIteratorHasMoreBytes(S86_BufferIterator it);
 uint8_t S86_BufferIteratorPeekByte(S86_BufferIterator it);
 uint8_t S86_BufferIteratorNextByte(S86_BufferIterator *it);
 
+// NOTE: File
+// ============================================================================
 S86_Buffer S86_FileRead(char const *file_path);
 void S86_FileFree(S86_Buffer buffer);
+
+// NOTE: Print
+// ============================================================================
 void S86_PrintLn(S86_Str8 string);
 void S86_PrintLnFmt(char const *fmt, ...);
 
+// NOTE: Sim8086
+// ============================================================================
+typedef enum S86_InstructionType {
+    S86_InstructionType_MOVRegOrMemToOrFromReg,
+    S86_InstructionType_MOVImmediateToRegOrMem,
+    S86_InstructionType_MOVImmediateToReg,
+    S86_InstructionType_MOVMemToAccum,
+    S86_InstructionType_MOVAccumToMem,
+    S86_InstructionType_MOVRegOrMemToSegReg,
+    S86_InstructionType_MOVSegRegToRegOrMem,
+    S86_InstructionType_Count,
+} S86_InstructionType;
+
+/// Bit patterns and masks for decoding 8086 assembly. 8086 opcodes can be up
+/// to 2 bytes long and mixed with instruction specific control bits. These
+/// masks isolate the opcode bits from the bits can be checked after masking
+/// the binary instruction stream.
+///
+/// Instructions that do not have opcode bits in the 2nd byte will have the mask
+/// set to 0.
+typedef struct S86_Instruction {
+    uint8_t op_mask0;
+    uint8_t op_bits0;
+    uint8_t op_mask1;
+    uint8_t op_bits1;
+} S86_Instruction;
+
+S86_Instruction const S86_INSTRUCTIONS[S86_InstructionType_Count] = {
+    [S86_InstructionType_MOVRegOrMemToOrFromReg] = {.op_mask0 = 0b1111'1100,
+                                                    .op_bits0 = 0b1000'1000,
+                                                    .op_mask1 = 0b0000'0000,
+                                                    .op_bits1 = 0b0000'0000},
+
+    [S86_InstructionType_MOVImmediateToRegOrMem] = {.op_mask0 = 0b1111'1110,
+                                                    .op_bits0 = 0b1100'0110,
+                                                    .op_mask1 = 0b0011'1000,
+                                                    .op_bits1 = 0b0000'0000},
+
+    [S86_InstructionType_MOVImmediateToReg]      = {.op_mask0 = 0b1111'0000,
+                                                    .op_bits0 = 0b1011'0000,
+                                                    .op_mask1 = 0b0000'0000,
+                                                    .op_bits1 = 0b0000'0000},
+
+    [S86_InstructionType_MOVMemToAccum]          = {.op_mask0 = 0b1111'1110,
+                                                    .op_bits0 = 0b1010'0000,
+                                                    .op_mask1 = 0b0000'0000,
+                                                    .op_bits1 = 0b0000'0000},
+
+    [S86_InstructionType_MOVAccumToMem]          = {.op_mask0 = 0b1111'1110,
+                                                    .op_bits0 = 0b1010'0010,
+                                                    .op_mask1 = 0b0000'0000,
+                                                    .op_bits1 = 0b0000'0000},
+
+    [S86_InstructionType_MOVRegOrMemToSegReg]    = {.op_mask0 = 0b1111'1111,
+                                                    .op_bits0 = 0b1000'1110,
+                                                    .op_mask1 = 0b0010'0000,
+                                                    .op_bits1 = 0b0000'0000},
+
+    [S86_InstructionType_MOVSegRegToRegOrMem]    = {.op_mask0 = 0b1111'1111,
+                                                    .op_bits0 = 0b1000'1100,
+                                                    .op_mask1 = 0b0010'0000,
+                                                    .op_bits1 = 0b0000'0000},
+};
+
+// NOTE: Implementation
+// ============================================================================
 bool S86_BufferIsValid(S86_Buffer buffer)
 {
     bool result = buffer.data && buffer.size;
@@ -208,76 +285,25 @@ void S86_PrintLnFmt(char const *fmt, ...)
     va_end(args);
 }
 
-typedef enum S86_ModEncoding S86_ModEncoding;
-enum S86_ModEncoding {
-    S86_ModEncoding_MemModeNoDisplace = 0b00,
-    S86_ModEncoding_MemMode8          = 0b01,
-    S86_ModEncoding_MemMode16         = 0b10,
-    S86_ModEncoding_RegisterMode      = 0b11,
-};
-
-typedef enum S86_InstructionType S86_InstructionType;
-enum S86_InstructionType {
-    S86_InstructionType_MOVRegOrMemToOrFromReg,
-    S86_InstructionType_MOVImmediateToRegOrMem,
-    S86_InstructionType_MOVImmediateToReg,
-    S86_InstructionType_MOVMemToAccum,
-    S86_InstructionType_MOVAccumToMem,
-    S86_InstructionType_MOVRegOrMemToSegReg,
-    S86_InstructionType_MOVSegRegToRegOrMem,
-    S86_InstructionType_Count,
-};
-
-typedef struct S86_Instruction S86_Instruction;
-struct S86_Instruction {
-    uint8_t op_mask0;
-    uint8_t op_bits0;
-    uint8_t op_mask1;
-    uint8_t op_bits1;
-} S86_INSTRUCTIONS[S86_InstructionType_Count] = {
-    [S86_InstructionType_MOVRegOrMemToOrFromReg] = {.op_mask0 = 0b1111'1100,
-                                                    .op_bits0 = 0b1000'1000,
-                                                    .op_mask1 = 0b0000'0000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_MOVImmediateToRegOrMem] = {.op_mask0 = 0b1111'1110,
-                                                    .op_bits0 = 0b1100'0110,
-                                                    .op_mask1 = 0b0011'1000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_MOVImmediateToReg]      = {.op_mask0 = 0b1111'0000,
-                                                    .op_bits0 = 0b1011'0000,
-                                                    .op_mask1 = 0b0000'0000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_MOVMemToAccum]          = {.op_mask0 = 0b1111'1110,
-                                                    .op_bits0 = 0b1010'0000,
-                                                    .op_mask1 = 0b0000'0000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_MOVAccumToMem]          = {.op_mask0 = 0b1111'1110,
-                                                    .op_bits0 = 0b1010'0010,
-                                                    .op_mask1 = 0b0000'0000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_MOVRegOrMemToSegReg]    = {.op_mask0 = 0b1111'1111,
-                                                    .op_bits0 = 0b1000'1110,
-                                                    .op_mask1 = 0b0010'0000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_MOVSegRegToRegOrMem]    = {.op_mask0 = 0b1111'1111,
-                                                    .op_bits0 = 0b1000'1100,
-                                                    .op_mask1 = 0b0010'0000,
-                                                    .op_bits1 = 0b0000'0000},
-};
-
 int main(int argc, char **argv)
 {
+    // NOTE: Argument handling
+    // =========================================================================
     if (argc != 2) {
         S86_PrintLn(S86_STR8("usage: sim8086.exe <binary asm file>"));
         return -1;
     }
 
+    char const *file_path = argv[1];
+    S86_Buffer buffer     = S86_FileRead(file_path);
+    if (!S86_BufferIsValid(buffer)) {
+        S86_PrintLnFmt("File read failed [path=\"%s\"]", argv[1], buffer.size);
+        return -1;
+    }
+
+    // NOTE: Sim8086
+    // =========================================================================
+    // Mapping from a 'reg' encoding to the register name.
     S86_Str8 const REGISTER_FIELD_ENCODING[2][8] = {
         [0b0] =
             {
@@ -303,13 +329,8 @@ int main(int argc, char **argv)
              },
     };
 
-    char const *file_path = argv[1];
-    S86_Buffer buffer     = S86_FileRead(file_path);
-    if (!S86_BufferIsValid(buffer)) {
-        S86_PrintLnFmt("File read failed [path=\"%s\"]", argv[1], buffer.size);
-        return -1;
-    }
-
+    // NOTE: Decode assembly
+    // =========================================================================
     S86_PrintLn(S86_STR8("bits 16"));
     S86_BufferIterator buffer_it = S86_BufferIteratorInit(buffer);
     while (S86_BufferIteratorHasMoreBytes(buffer_it)) {
@@ -326,7 +347,7 @@ int main(int argc, char **argv)
              instruction_type == S86_InstructionType_Count && instruction_index < S86_ARRAY_UCOUNT(S86_INSTRUCTIONS);
              instruction_index++)
         {
-            S86_Instruction *item = S86_INSTRUCTIONS + instruction_index;
+            S86_Instruction const *item = S86_INSTRUCTIONS + instruction_index;
 
             // NOTE: Check first instruction byte
             // =================================================================
@@ -354,7 +375,9 @@ int main(int argc, char **argv)
         // =================================================================
         S86_ASSERT(op_code_size > 0 && op_code_size <= S86_ARRAY_UCOUNT(op_code_bytes));
         S86_ASSERT(instruction_type != S86_InstructionType_Count && "Unknown instruction");
+
         switch (instruction_type) {
+
             case S86_InstructionType_MOVRegOrMemToOrFromReg: {
                 // NOTE: Instruction does not have opcode bits in the 2nd byte
                 S86_ASSERT(op_code_size == 1);
