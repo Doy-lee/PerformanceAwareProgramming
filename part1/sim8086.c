@@ -403,14 +403,14 @@ int main(int argc, char **argv)
                 } else {
                     // NOTE: Memory mode w/ effective address calculation
                     // =========================================================
-                    bool direct_address = mod == 0b00 && rm == 0b110;
-                    uint16_t displacement = 0;
+                    bool direct_address   = mod == 0b00 && rm == 0b110;
+                    int16_t displacement = 0;
                     if (mod == 0b10 || direct_address) { // Mem mode 16 bit displacement
                         uint8_t disp_lo = S86_BufferIteratorNextByte(&buffer_it);
                         uint8_t disp_hi = S86_BufferIteratorNextByte(&buffer_it);
-                        displacement    = (uint16_t)disp_lo << 0 | (uint16_t)disp_hi << 8;
+                        displacement    = (int16_t)((uint16_t)disp_hi << 8 | (uint16_t)disp_lo << 0);
                     } else if (mod == 0b01) { // Mem mode 8 bit displacement
-                        displacement = S86_BufferIteratorNextByte(&buffer_it);
+                        displacement    = (int8_t)S86_BufferIteratorNextByte(&buffer_it);
                     } else {
                         S86_ASSERT(mod == 0b00 /*Mem mode (no displacement)*/);
                     }
@@ -424,40 +424,30 @@ int main(int argc, char **argv)
                     if (direct_address) {
                         effective_addr_size += snprintf(effective_addr_buffer + effective_addr_size,
                                                         sizeof(effective_addr_buffer) - effective_addr_size,
-                                                        "%u",
-                                                        displacement);
+                                                        "%s%d",
+                                                        displacement >= 0 ? "" : "-", displacement >= 0 ? displacement : -displacement);
                     } else {
-                        if (rm == 0b110) {
-                            effective_addr_buffer[effective_addr_size++] = 'b';
-                            effective_addr_buffer[effective_addr_size++] = 'p';
-                            if (displacement) {
-                                effective_addr_size += snprintf(effective_addr_buffer + effective_addr_size,
-                                                                sizeof(effective_addr_buffer) - effective_addr_size,
-                                                                " + %u",
-                                                                displacement);
-                            }
-                        } else {
-                            S86_Str8 base_calc = {0};
-                            switch (rm) {
-                                case 0b000: base_calc = S86_STR8("bx + si"); break;
-                                case 0b001: base_calc = S86_STR8("bx + di"); break;
-                                case 0b010: base_calc = S86_STR8("bp + si"); break;
-                                case 0b011: base_calc = S86_STR8("bp + di"); break;
-                                case 0b100: base_calc = S86_STR8("si");      break;
-                                case 0b101: base_calc = S86_STR8("di");      break;
-                                case 0b111: base_calc = S86_STR8("bx");      break;
-                                default: S86_ASSERT(!"Invalid rm value, must be 3 bits"); break;
-                            }
+                        S86_Str8 base_calc = {0};
+                        switch (rm) {
+                            case 0b000: base_calc = S86_STR8("bx + si"); break;
+                            case 0b001: base_calc = S86_STR8("bx + di"); break;
+                            case 0b010: base_calc = S86_STR8("bp + si"); break;
+                            case 0b011: base_calc = S86_STR8("bp + di"); break;
+                            case 0b100: base_calc = S86_STR8("si");      break;
+                            case 0b101: base_calc = S86_STR8("di");      break;
+                            case 0b110: base_calc = S86_STR8("bp");      break;
+                            case 0b111: base_calc = S86_STR8("bx");      break;
+                            default: S86_ASSERT(!"Invalid rm value, must be 3 bits"); break;
+                        }
 
-                            memcpy(effective_addr_buffer + effective_addr_size, base_calc.data, base_calc.size);
-                            effective_addr_size += S86_CAST(int)base_calc.size;
+                        memcpy(effective_addr_buffer + effective_addr_size, base_calc.data, base_calc.size);
+                        effective_addr_size += S86_CAST(int)base_calc.size;
 
-                            if (mod == 0b01 || mod == 0b10) {
-                                effective_addr_size += snprintf(effective_addr_buffer + effective_addr_size,
-                                                                sizeof(effective_addr_buffer) - effective_addr_size,
-                                                                " + %u",
-                                                                displacement);
-                            }
+                        if ((mod == 0b01 || mod == 0b10) && displacement) {
+                            effective_addr_size += snprintf(effective_addr_buffer + effective_addr_size,
+                                                            sizeof(effective_addr_buffer) - effective_addr_size,
+                                                            " %c %d",
+                                                            displacement >= 0 ? '+' : '-', displacement >= 0 ? displacement : -displacement);
                         }
                     }
                     effective_addr_buffer[effective_addr_size++] = ']';
@@ -485,13 +475,13 @@ int main(int argc, char **argv)
                 // NOTE: Memory mode w/ effective address calculation
                 // =========================================================
                 bool direct_address = mod == 0b00 && rm == 0b110;
-                uint16_t displacement = 0;
+                int16_t displacement = 0;
                 if (mod == 0b10 || direct_address) { // Mem mode 16 bit displacement
                     uint8_t disp_lo = S86_BufferIteratorNextByte(&buffer_it);
                     uint8_t disp_hi = S86_BufferIteratorNextByte(&buffer_it);
-                    displacement    = (uint16_t)disp_lo << 0 | (uint16_t)disp_hi << 8;
+                    displacement    = (int16_t)((uint16_t)disp_lo << 0 | (uint16_t)disp_hi << 8);
                 } else if (mod == 0b01) { // Mem mode 8 bit displacement
-                    displacement = S86_BufferIteratorNextByte(&buffer_it);
+                    displacement = (int8_t)S86_BufferIteratorNextByte(&buffer_it);
                 } else {
                     S86_ASSERT(mod == 0b00 /*Mem mode (no displacement)*/);
                 }
@@ -513,40 +503,30 @@ int main(int argc, char **argv)
                 if (direct_address) {
                     effective_addr_size += snprintf(effective_addr_buffer + effective_addr_size,
                                                     sizeof(effective_addr_buffer) - effective_addr_size,
-                                                    "%u",
-                                                    displacement);
+                                                    "%s%d",
+                                                    displacement >= 0 ? "" : "-", displacement >= 0 ? displacement : -displacement);
                 } else {
-                    if (rm == 0b110) {
-                        effective_addr_buffer[effective_addr_size++] = 'b';
-                        effective_addr_buffer[effective_addr_size++] = 'p';
-                        if (displacement) {
-                            effective_addr_size += snprintf(effective_addr_buffer + effective_addr_size,
-                                                            sizeof(effective_addr_buffer) - effective_addr_size,
-                                                            " + %u",
-                                                            displacement);
-                        }
-                    } else {
-                        S86_Str8 base_calc = {0};
-                        switch (rm) {
-                            case 0b000: base_calc = S86_STR8("bx + si"); break;
-                            case 0b001: base_calc = S86_STR8("bx + di"); break;
-                            case 0b010: base_calc = S86_STR8("bp + si"); break;
-                            case 0b011: base_calc = S86_STR8("bp + di"); break;
-                            case 0b100: base_calc = S86_STR8("si");      break;
-                            case 0b101: base_calc = S86_STR8("di");      break;
-                            case 0b111: base_calc = S86_STR8("bx");      break;
-                            default: S86_ASSERT(!"Invalid rm value, must be 3 bits"); break;
-                        }
+                    S86_Str8 base_calc = {0};
+                    switch (rm) {
+                        case 0b000: base_calc = S86_STR8("bx + si"); break;
+                        case 0b001: base_calc = S86_STR8("bx + di"); break;
+                        case 0b010: base_calc = S86_STR8("bp + si"); break;
+                        case 0b011: base_calc = S86_STR8("bp + di"); break;
+                        case 0b100: base_calc = S86_STR8("si");      break;
+                        case 0b101: base_calc = S86_STR8("di");      break;
+                        case 0b110: base_calc = S86_STR8("bp");      break;
+                        case 0b111: base_calc = S86_STR8("bx");      break;
+                        default: S86_ASSERT(!"Invalid rm value, must be 3 bits"); break;
+                    }
 
-                        memcpy(effective_addr_buffer + effective_addr_size, base_calc.data, base_calc.size);
-                        effective_addr_size += S86_CAST(int)base_calc.size;
+                    memcpy(effective_addr_buffer + effective_addr_size, base_calc.data, base_calc.size);
+                    effective_addr_size += S86_CAST(int)base_calc.size;
 
-                        if (mod == 0b01 || mod == 0b10) {
-                            effective_addr_size += snprintf(effective_addr_buffer + effective_addr_size,
-                                                            sizeof(effective_addr_buffer) - effective_addr_size,
-                                                            " + %u",
-                                                            displacement);
-                        }
+                    if ((mod == 0b01 || mod == 0b10) && displacement) {
+                        effective_addr_size += snprintf(effective_addr_buffer + effective_addr_size,
+                                                        sizeof(effective_addr_buffer) - effective_addr_size,
+                                                        " %c %d",
+                                                        displacement >= 0 ? '+' : '-', displacement >= 0 ? displacement : -displacement);
                     }
                 }
                 effective_addr_buffer[effective_addr_size++] = ']';
