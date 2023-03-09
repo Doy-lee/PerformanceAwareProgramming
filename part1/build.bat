@@ -34,3 +34,8 @@ set listing_0039=%build_dir%\listing_0039_more_movs
 %build_dir%\sim8086.exe %listing_0039% > %listing_0039%_disassembled.asm
 nasm %listing_0039%_disassembled.asm
 fc %listing_0039% %listing_0039%_disassembled || exit /b 1
+
+set listing_0040=%build_dir%\listing_0040_challenge_movs
+%build_dir%\sim8086.exe %listing_0040% > %listing_0040%_disassembled.asm
+nasm %listing_0040%_disassembled.asm
+fc %listing_0040% %listing_0040%_disassembled || exit /b 1
