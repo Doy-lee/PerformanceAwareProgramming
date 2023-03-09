@@ -54,7 +54,6 @@ typedef struct S86_BufferIterator {
 bool S86_BufferIsValid(S86_Buffer buffer);
 S86_BufferIterator S86_BufferIteratorInit(S86_Buffer buffer);
 bool S86_BufferIteratorHasMoreBytes(S86_BufferIterator it);
-uint8_t S86_BufferIteratorPeekByte(S86_BufferIterator it);
 uint8_t S86_BufferIteratorNextByte(S86_BufferIterator *it);
 
 // NOTE: File
@@ -159,14 +158,6 @@ bool S86_BufferIteratorHasMoreBytes(S86_BufferIterator it)
     return result;
 }
 
-uint8_t S86_BufferIteratorPeekByte(S86_BufferIterator it)
-{
-    S86_ASSERT(S86_BufferIsValid(it.buffer));
-    S86_ASSERT(it.index < it.buffer.size);
-    uint8_t result = it.buffer.data[it.index];
-    return result;
-}
-
 uint8_t S86_BufferIteratorNextByte(S86_BufferIterator *it)
 {
     S86_ASSERT(it);
@@ -175,7 +166,6 @@ uint8_t S86_BufferIteratorNextByte(S86_BufferIterator *it)
     uint8_t result = it->buffer.data[it->index++];
     return result;
 }
-
 
 S86_Buffer S86_FileRead(char const *file_path)
 {
