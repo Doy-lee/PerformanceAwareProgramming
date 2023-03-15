@@ -76,6 +76,9 @@ typedef enum S86_InstructionType {
     S86_InstructionType_MOVAccumToMem,
     S86_InstructionType_MOVRegOrMemToSegReg,
     S86_InstructionType_MOVSegRegToRegOrMem,
+    S86_InstructionType_ADDRegOrMemToOrFromReg,
+    S86_InstructionType_ADDImmediateToRegOrMem,
+    S86_InstructionType_ADDImmediateToAccum,
     S86_InstructionType_Count,
 } S86_InstructionType;
 
@@ -128,6 +131,21 @@ S86_Instruction const S86_INSTRUCTIONS[S86_InstructionType_Count] = {
                                                     .op_bits0 = 0b1000'1100,
                                                     .op_mask1 = 0b0010'0000,
                                                     .op_bits1 = 0b0000'0000},
+
+    [S86_InstructionType_ADDRegOrMemToOrFromReg] = {.op_mask0 = 0b1111'1100,
+                                                    .op_bits0 = 0b0000'0000,
+                                                    .op_mask1 = 0b0000'0000,
+                                                    .op_bits1 = 0b0000'0000},
+
+    [S86_InstructionType_ADDImmediateToRegOrMem] = {.op_mask0 = 0b1111'1100,
+                                                    .op_bits0 = 0b1000'0000,
+                                                    .op_mask1 = 0b0011'1000,
+                                                    .op_bits1 = 0b0000'0000},
+
+    [S86_InstructionType_ADDImmediateToAccum]    = {.op_mask0 = 0b1111'1110,
+                                                    .op_bits0 = 0b0000'0100,
+                                                    .op_mask1 = 0b0000'0000,
+                                                    .op_bits1 = 0b0000'0000},
 };
 
 typedef struct S86_EffectiveAddressStr8 {
@@ -135,7 +153,7 @@ typedef struct S86_EffectiveAddressStr8 {
     size_t size;
 } S86_EffectiveAddressStr8;
 
-S86_EffectiveAddressStr8 S86_EffectiveAddressCalc(S86_BufferIterator *buffer_it, uint8_t rm, uint8_t mod);
+S86_EffectiveAddressStr8 S86_EffectiveAddressCalc(S86_BufferIterator *buffer_it, uint8_t rm, uint8_t mod, uint8_t w);
 
 // NOTE: Implementation
 // ============================================================================
@@ -282,7 +300,8 @@ void S86_PrintLnFmt(char const *fmt, ...)
     va_end(args);
 }
 
-S86_EffectiveAddressStr8 S86_EffectiveAddressCalc(S86_BufferIterator *buffer_it, uint8_t rm, uint8_t mod)
+S86_Str8 REGISTER_FIELD_ENCODING[2][8];
+S86_EffectiveAddressStr8 S86_EffectiveAddressCalc(S86_BufferIterator *buffer_it, uint8_t rm, uint8_t mod, uint8_t w)
 {
     // NOTE: Calculate displacement
     // =========================================================================
@@ -295,43 +314,49 @@ S86_EffectiveAddressStr8 S86_EffectiveAddressCalc(S86_BufferIterator *buffer_it,
     } else if (mod == 0b01) { // Mem mode 8 bit displacement
         displacement = (int8_t)S86_BufferIteratorNextByte(buffer_it);
     } else {
-        S86_ASSERT(mod == 0b00 /*Mem mode (no displacement)*/);
+        S86_ASSERT(mod == 0b00 || mod == 0b11 /*Mem mode (no displacement)*/);
     }
 
-    // NOTE: Effective address calculation w/ displacement
-    // =========================================================================
     S86_EffectiveAddressStr8 result = {0};
-    result.data[result.size++] = '[';
-    if (direct_address) {
-        result.size += snprintf(result.data + result.size,
-                                sizeof(result.data) - result.size,
-                                "%s%d",
-                                displacement >= 0 ? "" : "-", displacement >= 0 ? displacement : -displacement);
+    if (mod == 0b11) {
+        S86_Str8 register_field = REGISTER_FIELD_ENCODING[w][rm];
+        memcpy(result.data, register_field.data, register_field.size);
+        result.size = register_field.size;
     } else {
-        S86_Str8 base_calc = {0};
-        switch (rm) {
-            case 0b000: base_calc = S86_STR8("bx + si"); break;
-            case 0b001: base_calc = S86_STR8("bx + di"); break;
-            case 0b010: base_calc = S86_STR8("bp + si"); break;
-            case 0b011: base_calc = S86_STR8("bp + di"); break;
-            case 0b100: base_calc = S86_STR8("si");      break;
-            case 0b101: base_calc = S86_STR8("di");      break;
-            case 0b110: base_calc = S86_STR8("bp");      break;
-            case 0b111: base_calc = S86_STR8("bx");      break;
-            default: S86_ASSERT(!"Invalid rm value, must be 3 bits"); break;
-        }
-
-        memcpy(result.data + result.size, base_calc.data, base_calc.size);
-        result.size += S86_CAST(int)base_calc.size;
-
-        if ((mod == 0b01 || mod == 0b10) && displacement) {
+        // NOTE: Effective address calculation w/ displacement
+        // =========================================================================
+        result.data[result.size++] = '[';
+        if (direct_address) {
             result.size += snprintf(result.data + result.size,
                                     sizeof(result.data) - result.size,
-                                    " %c %d",
-                                    displacement >= 0 ? '+' : '-', displacement >= 0 ? displacement : -displacement);
+                                    "%s%d",
+                                    displacement >= 0 ? "" : "-", displacement >= 0 ? displacement : -displacement);
+        } else {
+            S86_Str8 base_calc = {0};
+            switch (rm) {
+                case 0b000: base_calc = S86_STR8("bx + si"); break;
+                case 0b001: base_calc = S86_STR8("bx + di"); break;
+                case 0b010: base_calc = S86_STR8("bp + si"); break;
+                case 0b011: base_calc = S86_STR8("bp + di"); break;
+                case 0b100: base_calc = S86_STR8("si");      break;
+                case 0b101: base_calc = S86_STR8("di");      break;
+                case 0b110: base_calc = S86_STR8("bp");      break;
+                case 0b111: base_calc = S86_STR8("bx");      break;
+                default: S86_ASSERT(!"Invalid rm value, must be 3 bits"); break;
+            }
+
+            memcpy(result.data + result.size, base_calc.data, base_calc.size);
+            result.size += S86_CAST(int)base_calc.size;
+
+            if ((mod == 0b01 || mod == 0b10) && displacement) {
+                result.size += snprintf(result.data + result.size,
+                                        sizeof(result.data) - result.size,
+                                        " %c %d",
+                                        displacement >= 0 ? '+' : '-', displacement >= 0 ? displacement : -displacement);
+            }
         }
+        result.data[result.size++] = ']';
     }
-    result.data[result.size++] = ']';
 
     S86_ASSERT(result.size < S86_ARRAY_UCOUNT(result.data));
     return result;
@@ -356,30 +381,23 @@ int main(int argc, char **argv)
     // NOTE: Sim8086
     // =========================================================================
     // Mapping from a 'reg' encoding to the register name.
-    S86_Str8 const REGISTER_FIELD_ENCODING[2][8] = {
-        [0b0] =
-            {
-                   S86_STR8("al"),
-                   S86_STR8("cl"),
-                   S86_STR8("dl"),
-                   S86_STR8("bl"),
-                   S86_STR8("ah"),
-                   S86_STR8("ch"),
-                   S86_STR8("dh"),
-                   S86_STR8("bh"),
-            },
-        [0b1] =
-            {
-                   S86_STR8("ax"),
-                   S86_STR8("cx"),
-                   S86_STR8("dx"),
-                   S86_STR8("bx"),
-                   S86_STR8("sp"),
-                   S86_STR8("bp"),
-                   S86_STR8("si"),
-                   S86_STR8("di"),
-             },
-    };
+    REGISTER_FIELD_ENCODING[0b0][0] = S86_STR8("al");
+    REGISTER_FIELD_ENCODING[0b0][1] = S86_STR8("cl");
+    REGISTER_FIELD_ENCODING[0b0][2] = S86_STR8("dl");
+    REGISTER_FIELD_ENCODING[0b0][3] = S86_STR8("bl");
+    REGISTER_FIELD_ENCODING[0b0][4] = S86_STR8("ah");
+    REGISTER_FIELD_ENCODING[0b0][5] = S86_STR8("ch");
+    REGISTER_FIELD_ENCODING[0b0][6] = S86_STR8("dh");
+    REGISTER_FIELD_ENCODING[0b0][7] = S86_STR8("bh");
+
+    REGISTER_FIELD_ENCODING[0b1][0] = S86_STR8("ax");
+    REGISTER_FIELD_ENCODING[0b1][1] = S86_STR8("cx");
+    REGISTER_FIELD_ENCODING[0b1][2] = S86_STR8("dx");
+    REGISTER_FIELD_ENCODING[0b1][3] = S86_STR8("bx");
+    REGISTER_FIELD_ENCODING[0b1][4] = S86_STR8("sp");
+    REGISTER_FIELD_ENCODING[0b1][5] = S86_STR8("bp");
+    REGISTER_FIELD_ENCODING[0b1][6] = S86_STR8("si");
+    REGISTER_FIELD_ENCODING[0b1][7] = S86_STR8("di");
 
     // NOTE: Decode assembly
     // =========================================================================
@@ -430,6 +448,7 @@ int main(int argc, char **argv)
 
         switch (instruction_type) {
 
+            case S86_InstructionType_ADDRegOrMemToOrFromReg: /*FALLTHRU*/
             case S86_InstructionType_MOVRegOrMemToOrFromReg: {
                 // NOTE: Instruction does not have opcode bits in the 2nd byte
                 S86_ASSERT(op_code_size == 1);
@@ -446,55 +465,90 @@ int main(int argc, char **argv)
                 S86_ASSERT(reg < 8);
                 S86_ASSERT(rm  < 8);
 
+                S86_Str8 op = {0};
+                if (instruction_type == S86_InstructionType_MOVRegOrMemToOrFromReg) {
+                    op = S86_STR8("mov");
+                } else {
+                    op = S86_STR8("add");
+                    S86_ASSERT(instruction_type == S86_InstructionType_ADDRegOrMemToOrFromReg);
+                }
+
                 if (mod == 0b11) {
                     // NOTE: Register-to-register move
                     // =========================================================
                     S86_Str8 src_op    = REGISTER_FIELD_ENCODING[w][d ? rm  : reg];
                     S86_Str8 dest_op   = REGISTER_FIELD_ENCODING[w][d ? reg : rm];
-                    S86_PrintLnFmt("mov %.*s, %.*s", S86_STR8_FMT(dest_op), S86_STR8_FMT(src_op));
+                    S86_PrintLnFmt("%.*s %.*s, %.*s", S86_STR8_FMT(op), S86_STR8_FMT(dest_op), S86_STR8_FMT(src_op));
                 } else {
                     // NOTE: Memory mode w/ effective address calculation
                     // =========================================================
-                    S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod);
+                    S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod, w);
                     S86_Str8 addr    = { .data = effective_address.data, .size = effective_address.size };
                     S86_Str8 dest_op = d ? REGISTER_FIELD_ENCODING[w][reg] : addr;
                     S86_Str8 src_op  = d ? addr                            : REGISTER_FIELD_ENCODING[w][reg];
-                    S86_PrintLnFmt("mov %.*s, %.*s", S86_STR8_FMT(dest_op), S86_STR8_FMT(src_op));
+                    S86_PrintLnFmt("%.*s %.*s, %.*s", S86_STR8_FMT(op), S86_STR8_FMT(dest_op), S86_STR8_FMT(src_op));
                 }
             } break;
 
+            case S86_InstructionType_ADDImmediateToRegOrMem: /*FALLTHRU*/
             case S86_InstructionType_MOVImmediateToRegOrMem: {
                 S86_ASSERT(op_code_size == 2);
                 uint8_t w   = (op_code_bytes[0] & 0b0000'0001) >> 0;
+                uint8_t s   = (op_code_bytes[0] & 0b0000'0010) >> 1;
                 uint8_t mod = (op_code_bytes[1] & 0b1100'0000) >> 6;
                 uint8_t rm  = (op_code_bytes[1] & 0b0000'0111) >> 0;
                 S86_ASSERT(w   < 2);
                 S86_ASSERT(mod < 4);
                 S86_ASSERT(rm  < 8);
-                S86_ASSERT(mod != 0b11); // NOTE: Op is IMM->Reg, register-to-register not permitted
 
-                // NOTE: Memory mode w/ effective address calculation
-                // =========================================================
-                S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod);
+                S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod, w);
 
                 // NOTE: Parse data payload
                 // =============================================================
-                uint16_t data = S86_BufferIteratorNextByte(&buffer_it);
+                uint16_t data              = S86_BufferIteratorNextByte(&buffer_it);
+                bool sign_extend_8bit_data = false;
                 if (w) { // 16 bit data
-                    uint8_t data_hi = S86_BufferIteratorNextByte(&buffer_it);
-                    data |= (uint16_t)(data_hi) << 8;
+                    if (instruction_type == S86_InstructionType_ADDImmediateToRegOrMem && s) {
+                        sign_extend_8bit_data = true;
+                    } else {
+                        uint8_t data_hi = S86_BufferIteratorNextByte(&buffer_it);
+                        data |= (uint16_t)(data_hi) << 8;
+                    }
+                }
+
+                S86_Str8 op = {0};
+                if (instruction_type == S86_InstructionType_MOVImmediateToRegOrMem) {
+                    S86_ASSERT(mod != 0b11); // NOTE: Op is IMM->Reg, register-to-register not permitted
+                    op = S86_STR8("mov");
+                } else {
+                    S86_ASSERT(instruction_type == S86_InstructionType_ADDImmediateToRegOrMem);
+                    op = S86_STR8("add");
                 }
 
                 // NOTE: Disassemble
                 // =========================================================
-                S86_PrintLnFmt("mov %.*s, %s %u", effective_address.size, effective_address.data, w ? "word" : "byte", data);
+                if (instruction_type == S86_InstructionType_MOVImmediateToRegOrMem) {
+                    S86_PrintLnFmt("%.*s %.*s, %s %u", S86_STR8_FMT(op), effective_address.size, effective_address.data, w ? "word" : "byte", data);
+                } else {
+                    if (sign_extend_8bit_data) {
+                        S86_PrintLnFmt("%.*s %.*s, %d", S86_STR8_FMT(op), effective_address.size, effective_address.data, (int16_t)data);
+                    } else {
+                        S86_PrintLnFmt("%.*s %.*s, %u", S86_STR8_FMT(op), effective_address.size, effective_address.data, data);
+                    }
+                }
             } break;
 
+            case S86_InstructionType_ADDImmediateToAccum: /*FALLTHRU*/
             case S86_InstructionType_MOVImmediateToReg: {
                 // NOTE: Parse opcode control bits
                 // =============================================================
                 S86_ASSERT(op_code_size == 1);
-                uint8_t w   = (op_code_bytes[0] & 0b0000'1000) >> 3;
+                uint8_t w   = 0;
+                if (instruction_type == S86_InstructionType_ADDImmediateToAccum) {
+                    w = (op_code_bytes[0] & 0b0000'0001) >> 0;
+                } else {
+                    w = (op_code_bytes[0] & 0b0000'1000) >> 3;
+                }
                 uint8_t reg = (op_code_bytes[0] & 0b0000'0111) >> 0;
 
                 // NOTE: Parse data payload
@@ -507,8 +561,23 @@ int main(int argc, char **argv)
 
                 // NOTE: Disassemble
                 // =============================================================
-                S86_Str8 dest_register = REGISTER_FIELD_ENCODING[w][reg];
-                S86_PrintLnFmt("mov %.*s, %d", S86_STR8_FMT(dest_register), (int16_t)data);
+                S86_Str8 op            = {0};
+                S86_Str8 dest_register = {0};
+                if (instruction_type == S86_InstructionType_MOVImmediateToReg) {
+                    op            = S86_STR8("mov");
+                    dest_register = REGISTER_FIELD_ENCODING[w][reg];
+                } else {
+                    S86_ASSERT(instruction_type == S86_InstructionType_ADDImmediateToAccum);
+                    op = S86_STR8("add");
+                    if (w) {
+                        dest_register = S86_STR8("ax");
+                    } else {
+                        data = (uint16_t)(int8_t)data; // Sign extension
+                        dest_register = S86_STR8("al");
+                    }
+                }
+
+                S86_PrintLnFmt("%.*s %.*s, %d", S86_STR8_FMT(op), S86_STR8_FMT(dest_register), (int16_t)data);
             } break;
 
             case S86_InstructionType_MOVAccumToMem: /*FALLTHRU*/
