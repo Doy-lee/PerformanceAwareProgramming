@@ -76,9 +76,40 @@ typedef enum S86_InstructionType {
     S86_InstructionType_MOVAccumToMem,
     S86_InstructionType_MOVRegOrMemToSegReg,
     S86_InstructionType_MOVSegRegToRegOrMem,
+
     S86_InstructionType_ADDRegOrMemToOrFromReg,
     S86_InstructionType_ADDImmediateToRegOrMem,
     S86_InstructionType_ADDImmediateToAccum,
+
+    S86_InstructionType_SUBRegOrMemToOrFromReg,
+    S86_InstructionType_SUBImmediateFromRegOrMem,
+    S86_InstructionType_SUBImmediateFromAccum,
+
+    S86_InstructionType_CMPRegOrMemAndReg,
+    S86_InstructionType_CMPImmediateWithRegOrMem,
+    S86_InstructionType_CMPImmediateWithAccum,
+
+    S86_InstructionType_JE_JZ,
+    S86_InstructionType_JL_JNGE,
+    S86_InstructionType_JLE_JNG,
+    S86_InstructionType_JB_JNAE,
+    S86_InstructionType_JBE_JNA,
+    S86_InstructionType_JP_JPE,
+    S86_InstructionType_JO,
+    S86_InstructionType_JS,
+    S86_InstructionType_JNE_JNZ,
+    S86_InstructionType_JNL_JGE,
+    S86_InstructionType_JNLE_JG,
+    S86_InstructionType_JNB_JAE,
+    S86_InstructionType_JNBE_JA,
+    S86_InstructionType_JNP_JO,
+    S86_InstructionType_JNO,
+    S86_InstructionType_JNS,
+    S86_InstructionType_LOOP,
+    S86_InstructionType_LOOPZ_LOOPE,
+    S86_InstructionType_LOOPNZ_LOOPNE,
+    S86_InstructionType_JCZX,
+
     S86_InstructionType_Count,
 } S86_InstructionType;
 
@@ -94,59 +125,8 @@ typedef struct S86_Instruction {
     uint8_t op_bits0;
     uint8_t op_mask1;
     uint8_t op_bits1;
+    S86_Str8 mnemonic;
 } S86_Instruction;
-
-S86_Instruction const S86_INSTRUCTIONS[S86_InstructionType_Count] = {
-    [S86_InstructionType_MOVRegOrMemToOrFromReg] = {.op_mask0 = 0b1111'1100,
-                                                    .op_bits0 = 0b1000'1000,
-                                                    .op_mask1 = 0b0000'0000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_MOVImmediateToRegOrMem] = {.op_mask0 = 0b1111'1110,
-                                                    .op_bits0 = 0b1100'0110,
-                                                    .op_mask1 = 0b0011'1000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_MOVImmediateToReg]      = {.op_mask0 = 0b1111'0000,
-                                                    .op_bits0 = 0b1011'0000,
-                                                    .op_mask1 = 0b0000'0000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_MOVMemToAccum]          = {.op_mask0 = 0b1111'1110,
-                                                    .op_bits0 = 0b1010'0000,
-                                                    .op_mask1 = 0b0000'0000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_MOVAccumToMem]          = {.op_mask0 = 0b1111'1110,
-                                                    .op_bits0 = 0b1010'0010,
-                                                    .op_mask1 = 0b0000'0000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_MOVRegOrMemToSegReg]    = {.op_mask0 = 0b1111'1111,
-                                                    .op_bits0 = 0b1000'1110,
-                                                    .op_mask1 = 0b0010'0000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_MOVSegRegToRegOrMem]    = {.op_mask0 = 0b1111'1111,
-                                                    .op_bits0 = 0b1000'1100,
-                                                    .op_mask1 = 0b0010'0000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_ADDRegOrMemToOrFromReg] = {.op_mask0 = 0b1111'1100,
-                                                    .op_bits0 = 0b0000'0000,
-                                                    .op_mask1 = 0b0000'0000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_ADDImmediateToRegOrMem] = {.op_mask0 = 0b1111'1100,
-                                                    .op_bits0 = 0b1000'0000,
-                                                    .op_mask1 = 0b0011'1000,
-                                                    .op_bits1 = 0b0000'0000},
-
-    [S86_InstructionType_ADDImmediateToAccum]    = {.op_mask0 = 0b1111'1110,
-                                                    .op_bits0 = 0b0000'0100,
-                                                    .op_mask1 = 0b0000'0000,
-                                                    .op_bits1 = 0b0000'0000},
-};
 
 typedef struct S86_EffectiveAddressStr8 {
     char   data[32];
@@ -176,12 +156,19 @@ bool S86_BufferIteratorHasMoreBytes(S86_BufferIterator it)
     return result;
 }
 
-uint8_t S86_BufferIteratorNextByte(S86_BufferIterator *it)
+uint8_t S86_BufferIteratorPeekByte(S86_BufferIterator *it)
 {
     S86_ASSERT(it);
     S86_ASSERT(S86_BufferIsValid(it->buffer));
     S86_ASSERT(it->index < it->buffer.size);
-    uint8_t result = it->buffer.data[it->index++];
+    uint8_t result = it->buffer.data[it->index];
+    return result;
+}
+
+uint8_t S86_BufferIteratorNextByte(S86_BufferIterator *it)
+{
+    uint8_t result = S86_BufferIteratorPeekByte(it);
+    it->index++;
     return result;
 }
 
@@ -399,6 +386,82 @@ int main(int argc, char **argv)
     REGISTER_FIELD_ENCODING[0b1][6] = S86_STR8("si");
     REGISTER_FIELD_ENCODING[0b1][7] = S86_STR8("di");
 
+S86_Instruction const S86_INSTRUCTIONS[S86_InstructionType_Count] = {
+    [S86_InstructionType_MOVRegOrMemToOrFromReg]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b1000'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
+    [S86_InstructionType_MOVImmediateToRegOrMem]   = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
+                                                      .op_bits0 = 0b1100'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
+    [S86_InstructionType_MOVImmediateToReg]        = {.op_mask0 = 0b1111'0000, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b1011'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
+    [S86_InstructionType_MOVMemToAccum]            = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b1010'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
+    [S86_InstructionType_MOVAccumToMem]            = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b1010'0010, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
+    [S86_InstructionType_MOVRegOrMemToSegReg]      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0010'0000,
+                                                      .op_bits0 = 0b1000'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
+    [S86_InstructionType_MOVSegRegToRegOrMem]      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0010'0000,
+                                                      .op_bits0 = 0b1000'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
+    [S86_InstructionType_ADDRegOrMemToOrFromReg]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0000'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("add")},
+    [S86_InstructionType_ADDImmediateToRegOrMem]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                      .op_bits0 = 0b1000'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("add")},
+    [S86_InstructionType_ADDImmediateToAccum]      = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0000'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("add")},
+    [S86_InstructionType_SUBRegOrMemToOrFromReg]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0010'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sub")},
+    [S86_InstructionType_SUBImmediateFromRegOrMem] = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                      .op_bits0 = 0b1000'0000, .op_bits1 = 0b0010'1000, .mnemonic = S86_STR8("sub")},
+    [S86_InstructionType_SUBImmediateFromAccum]    = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0010'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sub")},
+    [S86_InstructionType_CMPRegOrMemAndReg]        = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0011'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cmp")},
+    [S86_InstructionType_CMPImmediateWithRegOrMem] = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                      .op_bits0 = 0b1000'0000, .op_bits1 = 0b0011'1000, .mnemonic = S86_STR8("cmp")},
+    [S86_InstructionType_CMPImmediateWithAccum]    = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0011'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cmp")},
+    [S86_InstructionType_JE_JZ]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'0101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jz")},
+    [S86_InstructionType_JL_JNGE]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'1101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jl")},
+    [S86_InstructionType_JLE_JNG]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jle")},
+    [S86_InstructionType_JB_JNAE]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'0010, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jb")},
+    [S86_InstructionType_JBE_JNA]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jbe")},
+    [S86_InstructionType_JP_JPE]                   = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'1010, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jp")},
+    [S86_InstructionType_JO]                       = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jo")},
+    [S86_InstructionType_JS]                       = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("js")},
+    [S86_InstructionType_JNE_JNZ]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'0101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jne")},
+    [S86_InstructionType_JNL_JGE]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'1101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnl")},
+    [S86_InstructionType_JNLE_JG]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnle")},
+    [S86_InstructionType_JNB_JAE]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'0011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnb")},
+    [S86_InstructionType_JNBE_JA]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'0111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnbe")},
+    [S86_InstructionType_JNP_JO]                   = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'1011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnp")},
+    [S86_InstructionType_JNO]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'0001, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jno")},
+    [S86_InstructionType_JNS]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b0111'1001, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jns")},
+    [S86_InstructionType_LOOP]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b1110'0010, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("loop")},
+    [S86_InstructionType_LOOPZ_LOOPE]              = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b1110'0001, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("loopz")},
+    [S86_InstructionType_LOOPNZ_LOOPNE]            = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b1110'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("loopnz")},
+    [S86_InstructionType_JCZX]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b1110'0011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jczx")},
+};
+
+
     // NOTE: Decode assembly
     // =========================================================================
     S86_PrintLn(S86_STR8("bits 16"));
@@ -431,8 +494,12 @@ int main(int argc, char **argv)
             bool instruction_matched = true;
             if (item->op_mask1) {
                 // TODO: This assumes the iterator is valid
-                op_code_bytes[op_code_size++] = S86_BufferIteratorNextByte(&buffer_it);
-                instruction_matched           = (op_code_bytes[op_code_size - 1] & item->op_mask1) == item->op_bits1;
+                uint8_t op_byte = S86_BufferIteratorPeekByte(&buffer_it);
+                instruction_matched = (op_byte & item->op_mask1) == item->op_bits1;
+                if (instruction_matched) {
+                    op_code_bytes[op_code_size++] = op_byte;
+                    S86_BufferIteratorNextByte(&buffer_it);
+                }
             }
 
             if (instruction_matched) {
@@ -448,6 +515,8 @@ int main(int argc, char **argv)
 
         switch (instruction_type) {
 
+            case S86_InstructionType_CMPRegOrMemAndReg: /*FALLTHRU*/
+            case S86_InstructionType_SUBRegOrMemToOrFromReg: /*FALLTHRU*/
             case S86_InstructionType_ADDRegOrMemToOrFromReg: /*FALLTHRU*/
             case S86_InstructionType_MOVRegOrMemToOrFromReg: {
                 // NOTE: Instruction does not have opcode bits in the 2nd byte
@@ -465,20 +534,12 @@ int main(int argc, char **argv)
                 S86_ASSERT(reg < 8);
                 S86_ASSERT(rm  < 8);
 
-                S86_Str8 op = {0};
-                if (instruction_type == S86_InstructionType_MOVRegOrMemToOrFromReg) {
-                    op = S86_STR8("mov");
-                } else {
-                    op = S86_STR8("add");
-                    S86_ASSERT(instruction_type == S86_InstructionType_ADDRegOrMemToOrFromReg);
-                }
-
                 if (mod == 0b11) {
                     // NOTE: Register-to-register move
                     // =========================================================
                     S86_Str8 src_op    = REGISTER_FIELD_ENCODING[w][d ? rm  : reg];
                     S86_Str8 dest_op   = REGISTER_FIELD_ENCODING[w][d ? reg : rm];
-                    S86_PrintLnFmt("%.*s %.*s, %.*s", S86_STR8_FMT(op), S86_STR8_FMT(dest_op), S86_STR8_FMT(src_op));
+                    S86_PrintLnFmt("%.*s %.*s, %.*s", S86_STR8_FMT(instruction->mnemonic), S86_STR8_FMT(dest_op), S86_STR8_FMT(src_op));
                 } else {
                     // NOTE: Memory mode w/ effective address calculation
                     // =========================================================
@@ -486,10 +547,12 @@ int main(int argc, char **argv)
                     S86_Str8 addr    = { .data = effective_address.data, .size = effective_address.size };
                     S86_Str8 dest_op = d ? REGISTER_FIELD_ENCODING[w][reg] : addr;
                     S86_Str8 src_op  = d ? addr                            : REGISTER_FIELD_ENCODING[w][reg];
-                    S86_PrintLnFmt("%.*s %.*s, %.*s", S86_STR8_FMT(op), S86_STR8_FMT(dest_op), S86_STR8_FMT(src_op));
+                    S86_PrintLnFmt("%.*s %.*s, %.*s", S86_STR8_FMT(instruction->mnemonic), S86_STR8_FMT(dest_op), S86_STR8_FMT(src_op));
                 }
             } break;
 
+            case S86_InstructionType_CMPImmediateWithRegOrMem: /*FALLTHRU*/
+            case S86_InstructionType_SUBImmediateFromRegOrMem: /*FALLTHRU*/
             case S86_InstructionType_ADDImmediateToRegOrMem: /*FALLTHRU*/
             case S86_InstructionType_MOVImmediateToRegOrMem: {
                 S86_ASSERT(op_code_size == 2);
@@ -508,7 +571,9 @@ int main(int argc, char **argv)
                 uint16_t data              = S86_BufferIteratorNextByte(&buffer_it);
                 bool sign_extend_8bit_data = false;
                 if (w) { // 16 bit data
-                    if (instruction_type == S86_InstructionType_ADDImmediateToRegOrMem && s) {
+                    if ((instruction_type == S86_InstructionType_ADDImmediateToRegOrMem ||
+                         instruction_type == S86_InstructionType_SUBImmediateFromRegOrMem ||
+                         instruction_type == S86_InstructionType_CMPImmediateWithRegOrMem) && s) {
                         sign_extend_8bit_data = true;
                     } else {
                         uint8_t data_hi = S86_BufferIteratorNextByte(&buffer_it);
@@ -516,35 +581,34 @@ int main(int argc, char **argv)
                     }
                 }
 
-                S86_Str8 op = {0};
                 if (instruction_type == S86_InstructionType_MOVImmediateToRegOrMem) {
                     S86_ASSERT(mod != 0b11); // NOTE: Op is IMM->Reg, register-to-register not permitted
-                    op = S86_STR8("mov");
-                } else {
-                    S86_ASSERT(instruction_type == S86_InstructionType_ADDImmediateToRegOrMem);
-                    op = S86_STR8("add");
                 }
 
                 // NOTE: Disassemble
                 // =========================================================
                 if (instruction_type == S86_InstructionType_MOVImmediateToRegOrMem) {
-                    S86_PrintLnFmt("%.*s %.*s, %s %u", S86_STR8_FMT(op), effective_address.size, effective_address.data, w ? "word" : "byte", data);
+                    S86_PrintLnFmt("%.*s %.*s, %s %u", S86_STR8_FMT(instruction->mnemonic), effective_address.size, effective_address.data, w ? "word" : "byte", data);
                 } else {
                     if (sign_extend_8bit_data) {
-                        S86_PrintLnFmt("%.*s %.*s, %d", S86_STR8_FMT(op), effective_address.size, effective_address.data, (int16_t)data);
+                        S86_PrintLnFmt("%.*s %.*s, %d", S86_STR8_FMT(instruction->mnemonic), effective_address.size, effective_address.data, (int16_t)data);
                     } else {
-                        S86_PrintLnFmt("%.*s %.*s, %u", S86_STR8_FMT(op), effective_address.size, effective_address.data, data);
+                        S86_PrintLnFmt("%.*s %.*s, %u", S86_STR8_FMT(instruction->mnemonic), effective_address.size, effective_address.data, data);
                     }
                 }
             } break;
 
+            case S86_InstructionType_CMPImmediateWithAccum: /*FALLTHRU*/
+            case S86_InstructionType_SUBImmediateFromAccum: /*FALLTHRU*/
             case S86_InstructionType_ADDImmediateToAccum: /*FALLTHRU*/
             case S86_InstructionType_MOVImmediateToReg: {
                 // NOTE: Parse opcode control bits
                 // =============================================================
                 S86_ASSERT(op_code_size == 1);
                 uint8_t w   = 0;
-                if (instruction_type == S86_InstructionType_ADDImmediateToAccum) {
+                if (instruction_type == S86_InstructionType_ADDImmediateToAccum ||
+                    instruction_type == S86_InstructionType_SUBImmediateFromAccum ||
+                    instruction_type == S86_InstructionType_CMPImmediateWithAccum) {
                     w = (op_code_bytes[0] & 0b0000'0001) >> 0;
                 } else {
                     w = (op_code_bytes[0] & 0b0000'1000) >> 3;
@@ -561,14 +625,13 @@ int main(int argc, char **argv)
 
                 // NOTE: Disassemble
                 // =============================================================
-                S86_Str8 op            = {0};
                 S86_Str8 dest_register = {0};
                 if (instruction_type == S86_InstructionType_MOVImmediateToReg) {
-                    op            = S86_STR8("mov");
                     dest_register = REGISTER_FIELD_ENCODING[w][reg];
                 } else {
-                    S86_ASSERT(instruction_type == S86_InstructionType_ADDImmediateToAccum);
-                    op = S86_STR8("add");
+                    S86_ASSERT(instruction_type == S86_InstructionType_ADDImmediateToAccum ||
+                               instruction_type == S86_InstructionType_SUBImmediateFromAccum ||
+                               instruction_type == S86_InstructionType_CMPImmediateWithAccum);
                     if (w) {
                         dest_register = S86_STR8("ax");
                     } else {
@@ -577,7 +640,7 @@ int main(int argc, char **argv)
                     }
                 }
 
-                S86_PrintLnFmt("%.*s %.*s, %d", S86_STR8_FMT(op), S86_STR8_FMT(dest_register), (int16_t)data);
+                S86_PrintLnFmt("%.*s %.*s, %d", S86_STR8_FMT(instruction->mnemonic), S86_STR8_FMT(dest_register), (int16_t)data);
             } break;
 
             case S86_InstructionType_MOVAccumToMem: /*FALLTHRU*/
@@ -589,18 +652,22 @@ int main(int argc, char **argv)
 
                 S86_Str8 fmt = {0};
                 if (instruction_type == S86_InstructionType_MOVAccumToMem) {
-                    fmt = S86_STR8("mov [%u], ax");
+                    fmt = S86_STR8("%.*s [%u], ax");
                 } else {
                     S86_ASSERT(instruction_type == S86_InstructionType_MOVMemToAccum);
-                    fmt = S86_STR8("mov ax, [%u]");
+                    fmt = S86_STR8("%.*s ax, [%u]");
                 }
-                S86_PrintLnFmt(fmt.data, addr);
+                S86_PrintLnFmt(fmt.data, S86_STR8_FMT(instruction->mnemonic), addr);
             } break;
 
-            case S86_InstructionType_MOVRegOrMemToSegReg: /*FALLTHRU*/
-            case S86_InstructionType_MOVSegRegToRegOrMem: /*FALLTHRU*/
             default: {
-                S86_ASSERT(!"Unhandled instruction");
+                if (instruction_type >= S86_InstructionType_JE_JZ && instruction_type <= S86_InstructionType_JCZX) {
+                    S86_ASSERT(op_code_size == 1);
+                    int8_t jump_offset = S86_CAST(int8_t)S86_BufferIteratorNextByte(&buffer_it);
+                    S86_PrintLnFmt("%.*s %d", S86_STR8_FMT(instruction->mnemonic), jump_offset);
+                } else {
+                    S86_ASSERT(!"Unhandled instruction");
+                }
             } break;
         }
     }
