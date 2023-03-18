@@ -96,6 +96,14 @@ typedef enum S86_InstructionType {
 
     S86_InstructionType_XLAT,
 
+    S86_InstructionType_LEA,
+    S86_InstructionType_LDS,
+    S86_InstructionType_LES,
+    S86_InstructionType_LAHF,
+    S86_InstructionType_SAHF,
+    S86_InstructionType_PUSHF,
+    S86_InstructionType_POPF,
+
     S86_InstructionType_ADDRegOrMemToOrFromReg,
     S86_InstructionType_ADDImmediateToRegOrMem,
     S86_InstructionType_ADDImmediateToAccum,
@@ -477,6 +485,21 @@ int main(int argc, char **argv)
         [S86_InstructionType_XLAT]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
                                                           .op_bits0 = 0b1101'0111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("xlat")},
 
+        [S86_InstructionType_LEA]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                          .op_bits0 = 0b1000'1101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("lea")},
+        [S86_InstructionType_LDS]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                          .op_bits0 = 0b1100'0101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("lds")},
+        [S86_InstructionType_LES]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                          .op_bits0 = 0b1100'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("les")},
+        [S86_InstructionType_LAHF]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                          .op_bits0 = 0b1001'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("lahf")},
+        [S86_InstructionType_SAHF]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                          .op_bits0 = 0b1001'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sahf")},
+        [S86_InstructionType_PUSHF]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                          .op_bits0 = 0b1001'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("pushf")},
+        [S86_InstructionType_POPF]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                          .op_bits0 = 0b1001'1101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("popf")},
+
         [S86_InstructionType_ADDRegOrMemToOrFromReg]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
                                                           .op_bits0 = 0b0000'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("add")},
         [S86_InstructionType_ADDImmediateToRegOrMem]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
@@ -627,6 +650,9 @@ int main(int argc, char **argv)
                 S86_PrintLnFmt(" %.*s", S86_STR8_FMT(reg_name));
             } break;
 
+            case S86_InstructionType_LEA: /*FALLTHRU*/
+            case S86_InstructionType_LDS: /*FALLTHRU*/
+            case S86_InstructionType_LES: /*FALLTHRU*/
             case S86_InstructionType_XCHGRegOrMemWithReg: /*FALLTHRU*/
             case S86_InstructionType_CMPRegOrMemAndReg: /*FALLTHRU*/
             case S86_InstructionType_SUBRegOrMemToOrFromReg: /*FALLTHRU*/
@@ -636,11 +662,20 @@ int main(int argc, char **argv)
                 S86_ASSERT(op_code_size == 1);
                 op_code_bytes[op_code_size++] = S86_BufferIteratorNextByte(&buffer_it);
 
-                uint8_t d = instruction_type == S86_InstructionType_XCHGRegOrMemWithReg
-                                ? 0
-                                : (op_code_bytes[0] & 0b0000'0010) >> 1;
+                uint8_t w = (op_code_bytes[0] & 0b0000'0001) >> 0;
+                uint8_t d = (op_code_bytes[0] & 0b0000'0010) >> 1;
+                if (instruction_type == S86_InstructionType_XCHGRegOrMemWithReg ||
+                    instruction_type == S86_InstructionType_LEA ||
+                    instruction_type == S86_InstructionType_LDS ||
+                    instruction_type == S86_InstructionType_LES) {
+                    if (instruction_type == S86_InstructionType_XCHGRegOrMemWithReg) {
+                        d = 0; // Destination is always the memory address
+                    } else  {
+                        d = 1; // Destination is always the register
+                        w = 1; // Always 16 bit (load into register)
+                    }
+                }
 
-                uint8_t w   = (op_code_bytes[0] & 0b0000'0001) >> 0;
                 uint8_t mod = (op_code_bytes[1] & 0b1100'0000) >> 6;
                 uint8_t reg = (op_code_bytes[1] & 0b0011'1000) >> 3;
                 uint8_t rm  = (op_code_bytes[1] & 0b0000'0111) >> 0;
@@ -653,8 +688,8 @@ int main(int argc, char **argv)
                 if (mod == 0b11) {
                     // NOTE: Register-to-register move
                     // =========================================================
-                    S86_Str8 src_op    = REGISTER_FIELD_ENCODING[w][d ? rm  : reg];
-                    S86_Str8 dest_op   = REGISTER_FIELD_ENCODING[w][d ? reg : rm];
+                    S86_Str8 src_op  = REGISTER_FIELD_ENCODING[w][d ? rm  : reg];
+                    S86_Str8 dest_op = REGISTER_FIELD_ENCODING[w][d ? reg : rm];
                     S86_PrintLnFmt(" %.*s, %.*s", S86_STR8_FMT(dest_op), S86_STR8_FMT(src_op));
                 } else {
                     // NOTE: Memory mode w/ effective address calculation
@@ -829,7 +864,11 @@ int main(int argc, char **argv)
                         sign = '-';
                     }
                     S86_PrintLnFmt(" $+2%c%d", sign, jump_offset);
-                } else if (instruction_type == S86_InstructionType_XLAT) {
+                } else if (instruction_type == S86_InstructionType_XLAT ||
+                           instruction_type == S86_InstructionType_LAHF ||
+                           instruction_type == S86_InstructionType_SAHF ||
+                           instruction_type == S86_InstructionType_PUSHF ||
+                           instruction_type == S86_InstructionType_POPF) {
                     // NOTE: Mnemonic instruction only, already printed
                     S86_Print(S86_STR8("\n"));
                 } else {
