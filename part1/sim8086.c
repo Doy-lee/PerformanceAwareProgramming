@@ -85,6 +85,9 @@ typedef enum S86_InstructionType {
     S86_InstructionType_POPReg,
     S86_InstructionType_POPSegReg,
 
+    S86_InstructionType_XCHGRegOrMemWithReg,
+    S86_InstructionType_XCHGRegWithAccum,
+
     S86_InstructionType_ADDRegOrMemToOrFromReg,
     S86_InstructionType_ADDImmediateToRegOrMem,
     S86_InstructionType_ADDImmediateToAccum,
@@ -448,6 +451,10 @@ int main(int argc, char **argv)
         [S86_InstructionType_POPSegReg]                = {.op_mask0 = 0b1110'0111, .op_mask1 = 0b0000'0000,
                                                           .op_bits0 = 0b0000'0111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("pop")},
 
+        [S86_InstructionType_XCHGRegOrMemWithReg]      = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                          .op_bits0 = 0b1000'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("xchg")},
+        [S86_InstructionType_XCHGRegWithAccum]         = {.op_mask0 = 0b1111'1000, .op_mask1 = 0b0000'0000,
+                                                          .op_bits0 = 0b1001'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("xchg")},
 
         [S86_InstructionType_ADDRegOrMemToOrFromReg]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
                                                           .op_bits0 = 0b0000'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("add")},
@@ -598,6 +605,7 @@ int main(int argc, char **argv)
                 S86_PrintLnFmt("%.*s %.*s", S86_STR8_FMT(instruction->mnemonic), S86_STR8_FMT(reg_name));
             } break;
 
+            case S86_InstructionType_XCHGRegOrMemWithReg: /*FALLTHRU*/
             case S86_InstructionType_CMPRegOrMemAndReg: /*FALLTHRU*/
             case S86_InstructionType_SUBRegOrMemToOrFromReg: /*FALLTHRU*/
             case S86_InstructionType_ADDRegOrMemToOrFromReg: /*FALLTHRU*/
@@ -606,7 +614,10 @@ int main(int argc, char **argv)
                 S86_ASSERT(op_code_size == 1);
                 op_code_bytes[op_code_size++] = S86_BufferIteratorNextByte(&buffer_it);
 
-                uint8_t d   = (op_code_bytes[0] & 0b0000'0010) >> 1;
+                uint8_t d = instruction_type == S86_InstructionType_XCHGRegOrMemWithReg
+                                ? 0
+                                : (op_code_bytes[0] & 0b0000'0010) >> 1;
+
                 uint8_t w   = (op_code_bytes[0] & 0b0000'0001) >> 0;
                 uint8_t mod = (op_code_bytes[1] & 0b1100'0000) >> 6;
                 uint8_t reg = (op_code_bytes[1] & 0b0011'1000) >> 3;
@@ -732,6 +743,13 @@ int main(int argc, char **argv)
                 }
 
                 S86_PrintLnFmt("%.*s %.*s, %d", S86_STR8_FMT(instruction->mnemonic), S86_STR8_FMT(dest_register), (int16_t)data);
+            } break;
+
+            case S86_InstructionType_XCHGRegWithAccum: {
+                S86_ASSERT(op_code_size == 1);
+                uint8_t reg       = (op_code_bytes[0] & 0b0000'0111) >> 0;
+                S86_Str8 reg_name = REGISTER_FIELD_ENCODING[1 /*w*/][reg];
+                S86_PrintLnFmt("%.*s ax, %.*s", S86_STR8_FMT(instruction->mnemonic), S86_STR8_FMT(reg_name));
             } break;
 
             case S86_InstructionType_MOVAccumToMem: /*FALLTHRU*/
