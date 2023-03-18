@@ -108,7 +108,7 @@ typedef enum S86_InstructionType {
     S86_InstructionType_LOOP,
     S86_InstructionType_LOOPZ_LOOPE,
     S86_InstructionType_LOOPNZ_LOOPNE,
-    S86_InstructionType_JCZX,
+    S86_InstructionType_JCXZ,
 
     S86_InstructionType_Count,
 } S86_InstructionType;
@@ -242,7 +242,7 @@ void S86_FileFree(S86_Buffer buffer)
         VirtualFree(buffer.data, 0, MEM_RELEASE);
 }
 
-void S86_PrintLn(S86_Str8 string)
+void S86_Print(S86_Str8 string)
 {
     if (s86_globals.stdout_handle == NULL) {
         s86_globals.stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -259,12 +259,36 @@ void S86_PrintLn(S86_Str8 string)
     if (s86_globals.write_to_console) {
         DWORD chars_written = 0;
         WriteConsoleA(s86_globals.stdout_handle, string.data, (DWORD)string.size, &chars_written, NULL);
-        WriteConsoleA(s86_globals.stdout_handle, "\n", 1, &chars_written, NULL);
     } else {
         DWORD bytes_written = 0;
         WriteFile(s86_globals.stdout_handle, string.data, (DWORD)string.size, &bytes_written, NULL);
-        WriteFile(s86_globals.stdout_handle, "\n", 1, &bytes_written, NULL);
     }
+}
+
+void S86_PrintLn(S86_Str8 string)
+{
+    S86_Print(string);
+    S86_Print(S86_STR8("\n"));
+}
+
+void S86_PrintFmt(char const *fmt, ...)
+{
+    va_list args, args_copy;
+    va_start(args, fmt);
+
+    va_copy(args_copy, args);
+    int string_size = vsnprintf(NULL, 0, fmt, args_copy);
+    va_end(args_copy);
+
+    char buffer[8192];
+    S86_ASSERT(string_size >= 0 && string_size < S86_ARRAY_UCOUNT(buffer));
+    if (string_size) {
+        vsnprintf(buffer, sizeof(buffer), fmt, args);
+        S86_Str8 string = {.data = buffer, .size = string_size};
+        S86_Print(string);
+    }
+
+    va_end(args);
 }
 
 void S86_PrintLnFmt(char const *fmt, ...)
@@ -420,9 +444,9 @@ S86_Instruction const S86_INSTRUCTIONS[S86_InstructionType_Count] = {
     [S86_InstructionType_CMPImmediateWithAccum]    = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
                                                       .op_bits0 = 0b0011'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cmp")},
     [S86_InstructionType_JE_JZ]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                      .op_bits0 = 0b0111'0101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jz")},
+                                                      .op_bits0 = 0b0111'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("je")},
     [S86_InstructionType_JL_JNGE]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                      .op_bits0 = 0b0111'1101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jl")},
+                                                      .op_bits0 = 0b0111'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jl")},
     [S86_InstructionType_JLE_JNG]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
                                                       .op_bits0 = 0b0111'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jle")},
     [S86_InstructionType_JB_JNAE]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
@@ -436,15 +460,15 @@ S86_Instruction const S86_INSTRUCTIONS[S86_InstructionType_Count] = {
     [S86_InstructionType_JS]                       = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
                                                       .op_bits0 = 0b0111'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("js")},
     [S86_InstructionType_JNE_JNZ]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                      .op_bits0 = 0b0111'0101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jne")},
+                                                      .op_bits0 = 0b0111'0101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnz")},
     [S86_InstructionType_JNL_JGE]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
                                                       .op_bits0 = 0b0111'1101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnl")},
     [S86_InstructionType_JNLE_JG]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                      .op_bits0 = 0b0111'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnle")},
+                                                      .op_bits0 = 0b0111'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jg")},
     [S86_InstructionType_JNB_JAE]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
                                                       .op_bits0 = 0b0111'0011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnb")},
     [S86_InstructionType_JNBE_JA]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                      .op_bits0 = 0b0111'0111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnbe")},
+                                                      .op_bits0 = 0b0111'0111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("ja")},
     [S86_InstructionType_JNP_JO]                   = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
                                                       .op_bits0 = 0b0111'1011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnp")},
     [S86_InstructionType_JNO]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
@@ -457,8 +481,8 @@ S86_Instruction const S86_INSTRUCTIONS[S86_InstructionType_Count] = {
                                                       .op_bits0 = 0b1110'0001, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("loopz")},
     [S86_InstructionType_LOOPNZ_LOOPNE]            = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
                                                       .op_bits0 = 0b1110'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("loopnz")},
-    [S86_InstructionType_JCZX]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                      .op_bits0 = 0b1110'0011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jczx")},
+    [S86_InstructionType_JCXZ]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                      .op_bits0 = 0b1110'0011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jcxz")},
 };
 
 
@@ -590,10 +614,18 @@ S86_Instruction const S86_INSTRUCTIONS[S86_InstructionType_Count] = {
                 if (instruction_type == S86_InstructionType_MOVImmediateToRegOrMem) {
                     S86_PrintLnFmt("%.*s %.*s, %s %u", S86_STR8_FMT(instruction->mnemonic), effective_address.size, effective_address.data, w ? "word" : "byte", data);
                 } else {
-                    if (sign_extend_8bit_data) {
-                        S86_PrintLnFmt("%.*s %.*s, %d", S86_STR8_FMT(instruction->mnemonic), effective_address.size, effective_address.data, (int16_t)data);
+                    if (effective_address.data[0] == '[') {
+                        if (sign_extend_8bit_data) {
+                            S86_PrintLnFmt("%.*s %s %.*s, %d", S86_STR8_FMT(instruction->mnemonic), w ? "word" : "byte", effective_address.size, effective_address.data, (int16_t)data);
+                        } else {
+                            S86_PrintLnFmt("%.*s %s %.*s, %u", S86_STR8_FMT(instruction->mnemonic), w ? "word" : "byte", effective_address.size, effective_address.data, data);
+                        }
                     } else {
-                        S86_PrintLnFmt("%.*s %.*s, %u", S86_STR8_FMT(instruction->mnemonic), effective_address.size, effective_address.data, data);
+                        if (sign_extend_8bit_data) {
+                            S86_PrintLnFmt("%.*s %.*s, %d", S86_STR8_FMT(instruction->mnemonic), effective_address.size, effective_address.data, (int16_t)data);
+                        } else {
+                            S86_PrintLnFmt("%.*s %.*s, %u", S86_STR8_FMT(instruction->mnemonic), effective_address.size, effective_address.data, data);
+                        }
                     }
                 }
             } break;
@@ -661,10 +693,17 @@ S86_Instruction const S86_INSTRUCTIONS[S86_InstructionType_Count] = {
             } break;
 
             default: {
-                if (instruction_type >= S86_InstructionType_JE_JZ && instruction_type <= S86_InstructionType_JCZX) {
+                if (instruction_type >= S86_InstructionType_JE_JZ && instruction_type <= S86_InstructionType_JCXZ) {
                     S86_ASSERT(op_code_size == 1);
                     int8_t jump_offset = S86_CAST(int8_t)S86_BufferIteratorNextByte(&buffer_it);
-                    S86_PrintLnFmt("%.*s %d", S86_STR8_FMT(instruction->mnemonic), jump_offset);
+                    char sign = 0;
+                    if (jump_offset > 0) {
+                        sign = '+';
+                    } else {
+                        jump_offset *= -1;
+                        sign = '-';
+                    }
+                    S86_PrintLnFmt("%.*s $+2%c%d", S86_STR8_FMT(instruction->mnemonic), sign, jump_offset);
                 } else {
                     S86_ASSERT(!"Unhandled instruction");
                 }

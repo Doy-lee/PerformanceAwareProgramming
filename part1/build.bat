@@ -11,6 +11,7 @@ copy /Y %script_dir%\listing_0037_single_register_mov %build_dir% 1>NUL
 copy /Y %script_dir%\listing_0038_many_register_mov %build_dir% 1>NUL
 copy /Y %script_dir%\listing_0039_more_movs %build_dir% 1>NUL
 copy /Y %script_dir%\listing_0040_challenge_movs %build_dir% 1>NUL
+copy /Y %script_dir%\listing_0041_add_sub_cmp_jnz %build_dir% 1>NUL
 
 REM Build
 REM ===========================================================================
@@ -23,19 +24,24 @@ REM ===========================================================================
 set listing_0037=%build_dir%\listing_0037_single_register_mov
 %build_dir%\sim8086.exe %listing_0037% > %listing_0037%_disassembled.asm
 nasm %listing_0037%_disassembled.asm
-fc %listing_0037% %listing_0037%_disassembled || exit /b 1
+fc /B %listing_0037% %listing_0037%_disassembled || exit /b 1
 
 set listing_0038=%build_dir%\listing_0038_many_register_mov
 %build_dir%\sim8086.exe %listing_0038% > %listing_0038%_disassembled.asm
 nasm %listing_0038%_disassembled.asm
-fc %listing_0038% %listing_0038%_disassembled || exit /b 1
+fc /B %listing_0038% %listing_0038%_disassembled || exit /b 1
 
 set listing_0039=%build_dir%\listing_0039_more_movs
 %build_dir%\sim8086.exe %listing_0039% > %listing_0039%_disassembled.asm
 nasm %listing_0039%_disassembled.asm
-fc %listing_0039% %listing_0039%_disassembled || exit /b 1
+fc /B %listing_0039% %listing_0039%_disassembled || exit /b 1
 
 set listing_0040=%build_dir%\listing_0040_challenge_movs
 %build_dir%\sim8086.exe %listing_0040% > %listing_0040%_disassembled.asm
 nasm %listing_0040%_disassembled.asm
-fc %listing_0040% %listing_0040%_disassembled || exit /b 1
+fc /B %listing_0040% %listing_0040%_disassembled || exit /b 1
+
+set listing_0041=%build_dir%\listing_0041_add_sub_cmp_jnz
+%build_dir%\sim8086.exe %listing_0041% > %listing_0041%_disassembled.asm
+nasm %listing_0041%_disassembled.asm
+fc /B %listing_0041% %listing_0041%_disassembled || exit /b 1
