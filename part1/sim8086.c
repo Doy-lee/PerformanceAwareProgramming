@@ -94,6 +94,8 @@ typedef enum S86_InstructionType {
     S86_InstructionType_OUTFixedPort,
     S86_InstructionType_OUTVariablePort,
 
+    S86_InstructionType_XLAT,
+
     S86_InstructionType_ADDRegOrMemToOrFromReg,
     S86_InstructionType_ADDImmediateToRegOrMem,
     S86_InstructionType_ADDImmediateToAccum,
@@ -472,6 +474,9 @@ int main(int argc, char **argv)
         [S86_InstructionType_OUTVariablePort]          = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
                                                           .op_bits0 = 0b1110'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("out")},
 
+        [S86_InstructionType_XLAT]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                          .op_bits0 = 0b1101'0111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("xlat")},
+
         [S86_InstructionType_ADDRegOrMemToOrFromReg]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
                                                           .op_bits0 = 0b0000'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("add")},
         [S86_InstructionType_ADDImmediateToRegOrMem]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
@@ -590,6 +595,7 @@ int main(int argc, char **argv)
         S86_ASSERT(op_code_size > 0 && op_code_size <= S86_ARRAY_UCOUNT(op_code_bytes));
         S86_ASSERT(instruction_type != S86_InstructionType_Count && "Unknown instruction");
 
+        S86_Print(instruction->mnemonic);
         switch (instruction_type) {
 
             case S86_InstructionType_POPRegOrMem: /*FALLTHRU*/
@@ -599,7 +605,7 @@ int main(int argc, char **argv)
                 uint8_t rm  = (op_code_bytes[1] & 0b0000'0111) >> 0;
                 S86_ASSERT(mod < 4); S86_ASSERT(rm  < 8);
                 S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod, 0 /*w*/);
-                S86_PrintLnFmt("%.*s word %.*s", S86_STR8_FMT(instruction->mnemonic), S86_STR8_FMT(effective_address));
+                S86_PrintLnFmt(" word %.*s", S86_STR8_FMT(effective_address));
             } break;
 
             case S86_InstructionType_PUSHReg:    /*FALLTHRU*/
@@ -618,7 +624,7 @@ int main(int argc, char **argv)
                     uint8_t sr = (op_code_bytes[0] & 0b0001'1000) >> 3;
                     reg_name   = SEGMENT_REGISTER_NAME[sr];
                 }
-                S86_PrintLnFmt("%.*s %.*s", S86_STR8_FMT(instruction->mnemonic), S86_STR8_FMT(reg_name));
+                S86_PrintLnFmt(" %.*s", S86_STR8_FMT(reg_name));
             } break;
 
             case S86_InstructionType_XCHGRegOrMemWithReg: /*FALLTHRU*/
@@ -649,7 +655,7 @@ int main(int argc, char **argv)
                     // =========================================================
                     S86_Str8 src_op    = REGISTER_FIELD_ENCODING[w][d ? rm  : reg];
                     S86_Str8 dest_op   = REGISTER_FIELD_ENCODING[w][d ? reg : rm];
-                    S86_PrintLnFmt("%.*s %.*s, %.*s", S86_STR8_FMT(instruction->mnemonic), S86_STR8_FMT(dest_op), S86_STR8_FMT(src_op));
+                    S86_PrintLnFmt(" %.*s, %.*s", S86_STR8_FMT(dest_op), S86_STR8_FMT(src_op));
                 } else {
                     // NOTE: Memory mode w/ effective address calculation
                     // =========================================================
@@ -657,7 +663,7 @@ int main(int argc, char **argv)
                     S86_Str8 addr    = { .data = effective_address.data, .size = effective_address.size };
                     S86_Str8 dest_op = d ? REGISTER_FIELD_ENCODING[w][reg] : addr;
                     S86_Str8 src_op  = d ? addr                            : REGISTER_FIELD_ENCODING[w][reg];
-                    S86_PrintLnFmt("%.*s %.*s, %.*s", S86_STR8_FMT(instruction->mnemonic), S86_STR8_FMT(dest_op), S86_STR8_FMT(src_op));
+                    S86_PrintLnFmt(" %.*s, %.*s", S86_STR8_FMT(dest_op), S86_STR8_FMT(src_op));
                 }
             } break;
 
@@ -698,19 +704,19 @@ int main(int argc, char **argv)
                 // NOTE: Disassemble
                 // =========================================================
                 if (instruction_type == S86_InstructionType_MOVImmediateToRegOrMem) {
-                    S86_PrintLnFmt("%.*s %.*s, %s %u", S86_STR8_FMT(instruction->mnemonic), effective_address.size, effective_address.data, w ? "word" : "byte", data);
+                    S86_PrintLnFmt(" %.*s, %s %u", effective_address.size, effective_address.data, w ? "word" : "byte", data);
                 } else {
                     if (effective_address.data[0] == '[') {
                         if (sign_extend_8bit_data) {
-                            S86_PrintLnFmt("%.*s %s %.*s, %d", S86_STR8_FMT(instruction->mnemonic), w ? "word" : "byte", effective_address.size, effective_address.data, (int16_t)data);
+                            S86_PrintLnFmt(" %s %.*s, %d", w ? "word" : "byte", effective_address.size, effective_address.data, (int16_t)data);
                         } else {
-                            S86_PrintLnFmt("%.*s %s %.*s, %u", S86_STR8_FMT(instruction->mnemonic), w ? "word" : "byte", effective_address.size, effective_address.data, data);
+                            S86_PrintLnFmt(" %s %.*s, %u", w ? "word" : "byte", effective_address.size, effective_address.data, data);
                         }
                     } else {
                         if (sign_extend_8bit_data) {
-                            S86_PrintLnFmt("%.*s %.*s, %d", S86_STR8_FMT(instruction->mnemonic), effective_address.size, effective_address.data, (int16_t)data);
+                            S86_PrintLnFmt(" %.*s, %d", effective_address.size, effective_address.data, (int16_t)data);
                         } else {
-                            S86_PrintLnFmt("%.*s %.*s, %u", S86_STR8_FMT(instruction->mnemonic), effective_address.size, effective_address.data, data);
+                            S86_PrintLnFmt(" %.*s, %u", effective_address.size, effective_address.data, data);
                         }
                     }
                 }
@@ -758,14 +764,14 @@ int main(int argc, char **argv)
                     }
                 }
 
-                S86_PrintLnFmt("%.*s %.*s, %d", S86_STR8_FMT(instruction->mnemonic), S86_STR8_FMT(dest_register), (int16_t)data);
+                S86_PrintLnFmt(" %.*s, %d", S86_STR8_FMT(dest_register), (int16_t)data);
             } break;
 
             case S86_InstructionType_XCHGRegWithAccum: {
                 S86_ASSERT(op_code_size == 1);
                 uint8_t reg       = (op_code_bytes[0] & 0b0000'0111) >> 0;
                 S86_Str8 reg_name = REGISTER_FIELD_ENCODING[1 /*w*/][reg];
-                S86_PrintLnFmt("%.*s ax, %.*s", S86_STR8_FMT(instruction->mnemonic), S86_STR8_FMT(reg_name));
+                S86_PrintLnFmt(" ax, %.*s", S86_STR8_FMT(reg_name));
             } break;
 
             case S86_InstructionType_INFixedPort: /*FALLTHRU*/
@@ -788,11 +794,10 @@ int main(int argc, char **argv)
                     data_val[1] = 'x';
                 }
 
-                S86_PrintFmt("%.*s ", S86_STR8_FMT(instruction->mnemonic));
                 if (is_in)
-                    S86_PrintLnFmt("%.*s, %s", S86_STR8_FMT(accum_name), data_val);
+                    S86_PrintLnFmt(" %.*s, %s", S86_STR8_FMT(accum_name), data_val);
                 else
-                    S86_PrintLnFmt("%s, %.*s", data_val, S86_STR8_FMT(accum_name));
+                    S86_PrintLnFmt(" %s, %.*s", data_val, S86_STR8_FMT(accum_name));
             } break;
 
             case S86_InstructionType_MOVAccumToMem: /*FALLTHRU*/
@@ -804,12 +809,12 @@ int main(int argc, char **argv)
 
                 S86_Str8 fmt = {0};
                 if (instruction_type == S86_InstructionType_MOVAccumToMem) {
-                    fmt = S86_STR8("%.*s [%u], ax");
+                    fmt = S86_STR8(" [%u], ax");
                 } else {
                     S86_ASSERT(instruction_type == S86_InstructionType_MOVMemToAccum);
-                    fmt = S86_STR8("%.*s ax, [%u]");
+                    fmt = S86_STR8(" ax, [%u]");
                 }
-                S86_PrintLnFmt(fmt.data, S86_STR8_FMT(instruction->mnemonic), addr);
+                S86_PrintLnFmt(fmt.data, addr);
             } break;
 
             default: {
@@ -823,7 +828,10 @@ int main(int argc, char **argv)
                         jump_offset *= -1;
                         sign = '-';
                     }
-                    S86_PrintLnFmt("%.*s $+2%c%d", S86_STR8_FMT(instruction->mnemonic), sign, jump_offset);
+                    S86_PrintLnFmt(" $+2%c%d", sign, jump_offset);
+                } else if (instruction_type == S86_InstructionType_XLAT) {
+                    // NOTE: Mnemonic instruction only, already printed
+                    S86_Print(S86_STR8("\n"));
                 } else {
                     S86_ASSERT(!"Unhandled instruction");
                 }
