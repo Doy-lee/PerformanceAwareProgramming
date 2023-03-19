@@ -130,6 +130,9 @@ typedef enum S86_InstructionType {
     S86_InstructionType_DECReg,
     S86_InstructionType_NEG,
 
+    S86_InstructionType_AAS,
+    S86_InstructionType_DAS,
+
     S86_InstructionType_CMPRegOrMemAndReg,
     S86_InstructionType_CMPImmediateWithRegOrMem,
     S86_InstructionType_CMPImmediateWithAccum,
@@ -563,6 +566,11 @@ int main(int argc, char **argv)
         [S86_InstructionType_NEG]                        = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
                                                             .op_bits0 = 0b1111'0110, .op_bits1 = 0b0001'1000, .mnemonic = S86_STR8("neg")},
 
+        [S86_InstructionType_AAS]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0011'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("aas")},
+        [S86_InstructionType_DAS]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0010'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("das")},
+
         [S86_InstructionType_CMPRegOrMemAndReg]          = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b0011'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cmp")},
         [S86_InstructionType_CMPImmediateWithRegOrMem]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
@@ -944,7 +952,9 @@ int main(int argc, char **argv)
                            instruction_type == S86_InstructionType_PUSHF ||
                            instruction_type == S86_InstructionType_POPF  ||
                            instruction_type == S86_InstructionType_DAA   ||
-                           instruction_type == S86_InstructionType_AAA) {
+                           instruction_type == S86_InstructionType_AAA   ||
+                           instruction_type == S86_InstructionType_DAS   ||
+                           instruction_type == S86_InstructionType_AAS) {
                     // NOTE: Mnemonic instruction only, already printed
                     S86_Print(S86_STR8("\n"));
                 } else {
