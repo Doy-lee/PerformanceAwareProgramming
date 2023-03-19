@@ -133,6 +133,24 @@ typedef enum S86_InstructionType {
     S86_InstructionType_AAS,
     S86_InstructionType_DAS,
 
+    S86_InstructionType_MUL,
+    S86_InstructionType_IMUL,
+    S86_InstructionType_AAM,
+    S86_InstructionType_DIV,
+    S86_InstructionType_IDIV,
+    S86_InstructionType_AAD,
+    S86_InstructionType_CBW,
+    S86_InstructionType_CWD,
+
+    S86_InstructionType_NOT,
+    S86_InstructionType_SHL_SAL,
+    S86_InstructionType_SHR,
+    S86_InstructionType_SAR,
+    S86_InstructionType_ROL,
+    S86_InstructionType_ROR,
+    S86_InstructionType_RCL,
+    S86_InstructionType_RCR,
+
     S86_InstructionType_CMPRegOrMemAndReg,
     S86_InstructionType_CMPImmediateWithRegOrMem,
     S86_InstructionType_CMPImmediateWithAccum,
@@ -458,7 +476,7 @@ int main(int argc, char **argv)
     REGISTER_FIELD_ENCODING[0b1][6] = S86_STR8("si");
     REGISTER_FIELD_ENCODING[0b1][7] = S86_STR8("di");
 
-    S86_Instruction const S86_INSTRUCTIONS[S86_InstructionType_Count] = {
+    S86_Instruction const S86_INSTRUCTIONS[] = {
         [S86_InstructionType_MOVRegOrMemToOrFromReg]     = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b1000'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
         [S86_InstructionType_MOVImmediateToRegOrMem]     = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
@@ -566,17 +584,52 @@ int main(int argc, char **argv)
         [S86_InstructionType_NEG]                        = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
                                                             .op_bits0 = 0b1111'0110, .op_bits1 = 0b0001'1000, .mnemonic = S86_STR8("neg")},
 
-        [S86_InstructionType_AAS]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                            .op_bits0 = 0b0011'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("aas")},
-        [S86_InstructionType_DAS]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                            .op_bits0 = 0b0010'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("das")},
-
         [S86_InstructionType_CMPRegOrMemAndReg]          = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b0011'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cmp")},
         [S86_InstructionType_CMPImmediateWithRegOrMem]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
                                                             .op_bits0 = 0b1000'0000, .op_bits1 = 0b0011'1000, .mnemonic = S86_STR8("cmp")},
         [S86_InstructionType_CMPImmediateWithAccum]      = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b0011'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cmp")},
+
+        [S86_InstructionType_AAS]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0011'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("aas")},
+        [S86_InstructionType_DAS]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0010'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("das")},
+
+        [S86_InstructionType_MUL]                        = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1111'0110, .op_bits1 = 0b0010'0000, .mnemonic = S86_STR8("mul")},
+        [S86_InstructionType_IMUL]                       = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1111'0110, .op_bits1 = 0b0010'1000, .mnemonic = S86_STR8("imul")},
+        [S86_InstructionType_AAM]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b1111'1111,
+                                                            .op_bits0 = 0b1101'0100, .op_bits1 = 0b0000'1010, .mnemonic = S86_STR8("aam")},
+        [S86_InstructionType_DIV]                        = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1111'0110, .op_bits1 = 0b0011'0000, .mnemonic = S86_STR8("div")},
+        [S86_InstructionType_IDIV]                       = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1111'0110, .op_bits1 = 0b0011'1000, .mnemonic = S86_STR8("idiv")},
+        [S86_InstructionType_AAD]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b1111'1111,
+                                                            .op_bits0 = 0b1101'0101, .op_bits1 = 0b0000'1010, .mnemonic = S86_STR8("aad")},
+        [S86_InstructionType_CBW]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1001'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cbw")},
+        [S86_InstructionType_CWD]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1001'1001, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cwd")},
+
+        [S86_InstructionType_NOT]                        = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1111'0110, .op_bits1 = 0b0001'0000, .mnemonic = S86_STR8("not")},
+        [S86_InstructionType_SHL_SAL]                    = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1101'0000, .op_bits1 = 0b0010'0000, .mnemonic = S86_STR8("shl")},
+        [S86_InstructionType_SHR]                        = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1101'0000, .op_bits1 = 0b0010'1000, .mnemonic = S86_STR8("shr")},
+        [S86_InstructionType_SAR]                        = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1101'0000, .op_bits1 = 0b0011'1000, .mnemonic = S86_STR8("sar")},
+        [S86_InstructionType_ROL]                        = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1101'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("rol")},
+        [S86_InstructionType_ROR]                        = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1101'0000, .op_bits1 = 0b0000'1000, .mnemonic = S86_STR8("ror")},
+        [S86_InstructionType_RCL]                        = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1101'0000, .op_bits1 = 0b0001'0000, .mnemonic = S86_STR8("rcl")},
+        [S86_InstructionType_RCR]                        = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1101'0000, .op_bits1 = 0b0001'1000, .mnemonic = S86_STR8("rcr")},
+
         [S86_InstructionType_JE_JZ]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b0111'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("je")},
         [S86_InstructionType_JL_JNGE]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
@@ -680,6 +733,18 @@ int main(int argc, char **argv)
         S86_Print(instruction->mnemonic);
         switch (instruction_type) {
 
+            case S86_InstructionType_NOT:         /*FALLTHRU*/
+            case S86_InstructionType_SHL_SAL:     /*FALLTHRU*/
+            case S86_InstructionType_SHR:         /*FALLTHRU*/
+            case S86_InstructionType_SAR:         /*FALLTHRU*/
+            case S86_InstructionType_ROL:         /*FALLTHRU*/
+            case S86_InstructionType_ROR:         /*FALLTHRU*/
+            case S86_InstructionType_RCL:         /*FALLTHRU*/
+            case S86_InstructionType_RCR:         /*FALLTHRU*/
+            case S86_InstructionType_MUL:         /*FALLTHRU*/
+            case S86_InstructionType_IMUL:        /*FALLTHRU*/
+            case S86_InstructionType_DIV:         /*FALLTHRU*/
+            case S86_InstructionType_IDIV:        /*FALLTHRU*/
             case S86_InstructionType_INCRegOrMem: /*FALLTHRU*/
             case S86_InstructionType_DECRegOrMem: /*FALLTHRU*/
             case S86_InstructionType_NEG:         /*FALLTHRU*/
@@ -690,17 +755,33 @@ int main(int argc, char **argv)
                 uint8_t rm  = (op_code_bytes[1] & 0b0000'0111) >> 0;
                 S86_ASSERT(mod < 4); S86_ASSERT(rm  < 8);
 
-                uint8_t w   = 1;
+                uint8_t w = 1;
                 if (instruction_type == S86_InstructionType_INCRegOrMem ||
                     instruction_type == S86_InstructionType_DECRegOrMem ||
-                    instruction_type == S86_InstructionType_NEG) {
+                    instruction_type == S86_InstructionType_NEG         ||
+                    instruction_type == S86_InstructionType_MUL         ||
+                    instruction_type == S86_InstructionType_MUL         ||
+                    instruction_type == S86_InstructionType_IMUL        ||
+                    instruction_type == S86_InstructionType_DIV         ||
+                    instruction_type == S86_InstructionType_IDIV        ||
+                    (instruction_type >= S86_InstructionType_NOT &&
+                     instruction_type <= S86_InstructionType_RCR)) {
                     w = op_code_bytes[0] & 0b0000'0001;
                 }
 
                 S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod, w);
                 if (effective_address.data[0] == '[')
                     S86_PrintFmt(" %s", w ? "word" : "byte");
-                S86_PrintLnFmt(" %.*s", S86_STR8_FMT(effective_address));
+                S86_PrintFmt(" %.*s", S86_STR8_FMT(effective_address));
+
+                // NOTE: Bit shifts use 'v' to indicate if shift distance should 
+                // come from cl register otherwise bitshift by 1
+                if (instruction_type >= S86_InstructionType_SHL_SAL && instruction_type <= S86_InstructionType_RCR) {
+                    uint8_t v = (op_code_bytes[0] & 0b0000'0010) >> 1;
+                    S86_PrintFmt(", %s", v ? "cl" : "1");
+                }
+
+                S86_Print(S86_STR8("\n"));
             } break;
 
             case S86_InstructionType_DECReg:           /*FALLTHRU*/
@@ -954,7 +1035,11 @@ int main(int argc, char **argv)
                            instruction_type == S86_InstructionType_DAA   ||
                            instruction_type == S86_InstructionType_AAA   ||
                            instruction_type == S86_InstructionType_DAS   ||
-                           instruction_type == S86_InstructionType_AAS) {
+                           instruction_type == S86_InstructionType_AAS   ||
+                           instruction_type == S86_InstructionType_AAM   ||
+                           instruction_type == S86_InstructionType_AAD   ||
+                           instruction_type == S86_InstructionType_CBW   ||
+                           instruction_type == S86_InstructionType_CWD) {
                     // NOTE: Mnemonic instruction only, already printed
                     S86_Print(S86_STR8("\n"));
                 } else {
