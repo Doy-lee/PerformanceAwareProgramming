@@ -890,7 +890,7 @@ int main(int argc, char **argv)
 
         S86_Print(instruction->mnemonic);
         switch (instruction_type) {
-            // NOTE: Instruction Pattern => [0b000'0000W | 0bAA00'0CCC | DISP-LO | DISP-HI]
+            // NOTE: Instruction Pattern => [0b0000'0000W | 0bAA00'0CCC | DISP-LO | DISP-HI]
             // Where, W: Optional, AA: mod, CCC: R/M
             case S86_InstructionType_JMPIndirectWithinSeg:  /*FALLTHRU*/
             case S86_InstructionType_CALLIndirectWithinSeg: /*FALLTHRU*/
@@ -945,6 +945,8 @@ int main(int argc, char **argv)
                 S86_Print(S86_STR8("\n"));
             } break;
 
+            // NOTE: Instruction Pattern => [0b0000'0000]
+            // Generally handles instructions with control bits in any position in the first byte
             case S86_InstructionType_DECReg:           /*FALLTHRU*/
             case S86_InstructionType_INCReg:           /*FALLTHRU*/
             case S86_InstructionType_XCHGRegWithAccum: /*FALLTHRU*/
@@ -974,7 +976,7 @@ int main(int argc, char **argv)
                 S86_PrintLnFmt(" %.*s", S86_STR8_FMT(reg_name));
             } break;
 
-            // NOTE: Instruction Pattern => [0b000'000DW | 0bAABB'BCCC | DISP-LO | DISP-HI | DATA-LO | DATA-HI]
+            // NOTE: Instruction Pattern => [0b0000'000DW | 0bAABB'BCCC | DISP-LO | DISP-HI | DATA-LO | DATA-HI]
             // Where, D: optional, W: optional, AA: mod, BBB: reg, CCC: r/m
             case S86_InstructionType_ADDRegOrMemToOrFromReg:     /*FALLTHRU*/
             case S86_InstructionType_ADCRegOrMemWithRegToEither: /*FALLTHRU*/
@@ -1042,6 +1044,8 @@ int main(int argc, char **argv)
                 }
             } break;
 
+            // NOTE: Instruction Pattern => [0b0000'00SW | 0bAAA00BBB | DISP-LO | DISP-HI | DATA-LO | DATA-HI]
+            // Where S: optional, W: optional, AAA: mod, BBB: rm
             case S86_InstructionType_ADDImmediateToRegOrMem:   /*FALLTHRU*/
             case S86_InstructionType_ADCImmediateToRegOrMem:   /*FALLTHRU*/
             case S86_InstructionType_SUBImmediateFromRegOrMem: /*FALLTHRU*/
@@ -1104,13 +1108,14 @@ int main(int argc, char **argv)
                 }
             } break;
 
+            // NOTE: Instruction Pattern => [0b0000'W00W | DATA-LO | DATA-HI]
             case S86_InstructionType_ADDImmediateToAccum:   /*FALLTHRU*/
             case S86_InstructionType_ADCImmediateToAccum:   /*FALLTHRU*/
             case S86_InstructionType_SUBImmediateFromAccum: /*FALLTHRU*/
             case S86_InstructionType_SBBImmediateFromAccum: /*FALLTHRU*/
             case S86_InstructionType_CMPImmediateWithAccum: /*FALLTHRU*/
             case S86_InstructionType_ANDImmediateToAccum:   /*FALLTHRU*/
-            case S86_InstructionType_TESTImmediateAndAccum:  /*FALLTHRU*/
+            case S86_InstructionType_TESTImmediateAndAccum: /*FALLTHRU*/
             case S86_InstructionType_ORImmediateToAccum:    /*FALLTHRU*/
             case S86_InstructionType_XORImmediateToAccum:   /*FALLTHRU*/
             case S86_InstructionType_MOVImmediateToReg: {
@@ -1131,7 +1136,6 @@ int main(int argc, char **argv)
                 } else {
                     w = (op_code_bytes[0] & 0b0000'1000) >> 3;
                 }
-                uint8_t reg = (op_code_bytes[0] & 0b0000'0111) >> 0;
 
                 // NOTE: Parse data payload
                 // =============================================================
@@ -1145,6 +1149,7 @@ int main(int argc, char **argv)
                 // =============================================================
                 S86_Str8 dest_register = {0};
                 if (instruction_type == S86_InstructionType_MOVImmediateToReg) {
+                    uint8_t reg   = (op_code_bytes[0] & 0b0000'0111) >> 0;
                     dest_register = REGISTER_FIELD_ENCODING[w][reg];
                 } else {
                     if (w) {
@@ -1158,9 +1163,10 @@ int main(int argc, char **argv)
                 S86_PrintLnFmt(" %.*s, %d", S86_STR8_FMT(dest_register), (int16_t)data);
             } break;
 
-            case S86_InstructionType_INFixedPort: /*FALLTHRU*/
+            // NOTE: Instruction Pattern => [0b0000'000W | DATA-LO]
+            case S86_InstructionType_INFixedPort:    /*FALLTHRU*/
             case S86_InstructionType_INVariablePort: /*FALLTHRU*/
-            case S86_InstructionType_OUTFixedPort: /*FALLTHRU*/
+            case S86_InstructionType_OUTFixedPort:   /*FALLTHRU*/
             case S86_InstructionType_OUTVariablePort: {
                 S86_ASSERT(op_code_size == 1);
                 uint8_t w           = (op_code_bytes[0] & 0b0000'0001) >> 0;
@@ -1184,23 +1190,6 @@ int main(int argc, char **argv)
                     S86_PrintLnFmt(" %s, %.*s", data_val, S86_STR8_FMT(accum_name));
             } break;
 
-            case S86_InstructionType_MOVAccumToMem: /*FALLTHRU*/
-            case S86_InstructionType_MOVMemToAccum: {
-                S86_ASSERT(op_code_size == 1);
-                uint16_t addr_lo = S86_BufferIteratorNextByte(&buffer_it);
-                uint16_t addr_hi = S86_BufferIteratorNextByte(&buffer_it);
-                uint16_t addr    = (addr_hi << 8) | (addr_lo << 0);
-
-                S86_Str8 fmt = {0};
-                if (instruction_type == S86_InstructionType_MOVAccumToMem) {
-                    fmt = S86_STR8(" [%u], ax");
-                } else {
-                    S86_ASSERT(instruction_type == S86_InstructionType_MOVMemToAccum);
-                    fmt = S86_STR8(" ax, [%u]");
-                }
-                S86_PrintLnFmt(fmt.data, addr);
-            } break;
-
             case S86_InstructionType_REP: {
                 S86_ASSERT(op_code_size == 1);
                 uint8_t string_op = S86_BufferIteratorNextByte(&buffer_it);
@@ -1220,10 +1209,12 @@ int main(int argc, char **argv)
                 S86_PrintLnFmt(" %.*s%c", S86_STR8_FMT(string_type), w ? 'w' : 'b');
             } break;
 
-            // NOTE: Instruction Pattern => [0b000'00000 | DATA-LO | DATA-HI]
-            case S86_InstructionType_CALLDirectInterSeg: /*FALLTHRU*/
-            case S86_InstructionType_CALLDirectWithinSeg: /*FALLTHRU*/
-            case S86_InstructionType_JMPDirectInterSeg: /*FALLTHRU*/
+            // NOTE: Instruction Pattern => [0b0000'0000 | DATA-LO | DATA-HI]
+            case S86_InstructionType_MOVAccumToMem:                /*FALLTHRU*/
+            case S86_InstructionType_MOVMemToAccum:                /*FALLTHRU*/
+            case S86_InstructionType_CALLDirectInterSeg:           /*FALLTHRU*/
+            case S86_InstructionType_CALLDirectWithinSeg:          /*FALLTHRU*/
+            case S86_InstructionType_JMPDirectInterSeg:            /*FALLTHRU*/
             case S86_InstructionType_RETWithinSegAddImmediateToSP: /*FALLTHRU*/
             case S86_InstructionType_INT: {
                 S86_ASSERT(op_code_size == 1);
@@ -1244,6 +1235,10 @@ int main(int argc, char **argv)
                     uint8_t cs_hi = S86_BufferIteratorNextByte(&buffer_it);
                     uint16_t cs   = S86_CAST(uint16_t)cs_hi << 8 | (S86_CAST(uint16_t)cs_lo);
                     S86_PrintLnFmt(" %u:%u", cs, data);
+                } else if (instruction_type == S86_InstructionType_MOVAccumToMem) {
+                    S86_PrintLnFmt(" [%u], ax", data);
+                } else if (instruction_type == S86_InstructionType_MOVMemToAccum) {
+                    S86_PrintLnFmt(" ax, [%u]", data);
                 } else {
                     S86_PrintLnFmt(" %u", data);
                 }
