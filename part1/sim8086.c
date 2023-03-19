@@ -210,6 +210,11 @@ typedef enum S86_InstructionType {
     S86_InstructionType_LOOPNZ_LOOPNE,
     S86_InstructionType_JCXZ,
 
+    S86_InstructionType_INT,
+    S86_InstructionType_INT3,
+    S86_InstructionType_INTO,
+    S86_InstructionType_IRET,
+
     S86_InstructionType_Count,
 } S86_InstructionType;
 
@@ -764,6 +769,15 @@ int main(int argc, char **argv)
                                                               .op_bits0 = 0b1110'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("loopnz")},
         [S86_InstructionType_JCXZ]                         = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
                                                               .op_bits0 = 0b1110'0011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jcxz")},
+
+        [S86_InstructionType_INT]                          = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b1100'1101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("int")},
+        [S86_InstructionType_INT3]                         = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b1100'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("int3")},
+        [S86_InstructionType_INTO]                         = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b1100'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("into")},
+        [S86_InstructionType_IRET]                         = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b1100'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("iret")},
     };
 
     S86_Str8 SEGMENT_REGISTER_NAME[] = {
@@ -1149,16 +1163,22 @@ int main(int argc, char **argv)
 
             // NOTE: Instruction Pattern => [0b000'00000 | DATA-LO | DATA-HI]
             case S86_InstructionType_CALLDirectWithinSeg: /*FALLTHRU*/
-            case S86_InstructionType_RETWithinSegAddImmediateToSP: {
+            case S86_InstructionType_RETWithinSegAddImmediateToSP: /*FALLTHRU*/
+            case S86_InstructionType_INT: {
                 S86_ASSERT(op_code_size == 1);
                 uint8_t data_lo = S86_BufferIteratorNextByte(&buffer_it);
-                uint8_t data_hi = S86_BufferIteratorNextByte(&buffer_it);
-                int16_t data    = S86_CAST(int16_t)(S86_CAST(uint16_t)data_hi << 8 | (S86_CAST(uint16_t)data_lo));
+                uint16_t data   = data_lo;
+                if (instruction_type != S86_InstructionType_INT) {
+                    uint8_t data_hi = S86_BufferIteratorNextByte(&buffer_it);
+                    data = S86_CAST(uint16_t)data_hi << 8 | (S86_CAST(uint16_t)data_lo);
+                }
 
                 if (instruction_type == S86_InstructionType_CALLDirectWithinSeg) {
-                    S86_PrintLnFmt(" [bp - %d]", data);
+                    S86_PrintLnFmt(" [bp - %d]", S86_CAST(int16_t)data);
+                } else if (instruction_type == S86_InstructionType_RETWithinSegAddImmediateToSP) {
+                    S86_PrintLnFmt(" %d", S86_CAST(int16_t)data);
                 } else {
-                    S86_PrintLnFmt(" %d", data);
+                    S86_PrintLnFmt(" %u", data);
                 }
             } break;
 
@@ -1187,7 +1207,10 @@ int main(int argc, char **argv)
                            instruction_type == S86_InstructionType_AAD   ||
                            instruction_type == S86_InstructionType_CBW   ||
                            instruction_type == S86_InstructionType_CWD   ||
-                           instruction_type == S86_InstructionType_RETWithinSeg) {
+                           instruction_type == S86_InstructionType_RETWithinSeg ||
+                           instruction_type == S86_InstructionType_INT3 ||
+                           instruction_type == S86_InstructionType_INTO ||
+                           instruction_type == S86_InstructionType_IRET) {
                     // NOTE: Mnemonic instruction only, already printed
                     S86_Print(S86_STR8("\n"));
                 } else {
