@@ -115,6 +115,9 @@ typedef enum S86_InstructionType {
     S86_InstructionType_INCRegOrMem,
     S86_InstructionType_INCReg,
 
+    S86_InstructionType_AAA,
+    S86_InstructionType_DAA,
+
     S86_InstructionType_SUBRegOrMemToOrFromReg,
     S86_InstructionType_SUBImmediateFromRegOrMem,
     S86_InstructionType_SUBImmediateFromAccum,
@@ -523,9 +526,13 @@ int main(int argc, char **argv)
 
         [S86_InstructionType_INCRegOrMem]                = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
                                                             .op_bits0 = 0b1111'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("inc")},
-
         [S86_InstructionType_INCReg]                     = {.op_mask0 = 0b1111'1000, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b0100'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("inc")},
+
+        [S86_InstructionType_AAA]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0011'0111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("aaa")},
+        [S86_InstructionType_DAA]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0010'0111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("daa")},
 
         [S86_InstructionType_SUBRegOrMemToOrFromReg]     = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b0010'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sub")},
@@ -891,11 +898,13 @@ int main(int argc, char **argv)
                         sign = '-';
                     }
                     S86_PrintLnFmt(" $+2%c%d", sign, jump_offset);
-                } else if (instruction_type == S86_InstructionType_XLAT ||
-                           instruction_type == S86_InstructionType_LAHF ||
-                           instruction_type == S86_InstructionType_SAHF ||
+                } else if (instruction_type == S86_InstructionType_XLAT  ||
+                           instruction_type == S86_InstructionType_LAHF  ||
+                           instruction_type == S86_InstructionType_SAHF  ||
                            instruction_type == S86_InstructionType_PUSHF ||
-                           instruction_type == S86_InstructionType_POPF) {
+                           instruction_type == S86_InstructionType_POPF  ||
+                           instruction_type == S86_InstructionType_DAA   ||
+                           instruction_type == S86_InstructionType_AAA) {
                     // NOTE: Mnemonic instruction only, already printed
                     S86_Print(S86_STR8("\n"));
                 } else {
