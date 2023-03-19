@@ -226,6 +226,7 @@ typedef enum S86_InstructionType {
     S86_InstructionType_WAIT,
 
     S86_InstructionType_LOCK,
+    S86_InstructionType_SEGMENT,
 
     S86_InstructionType_Count,
 } S86_InstructionType;
@@ -248,9 +249,10 @@ typedef struct S86_Instruction {
 typedef struct S86_EffectiveAddressStr8 {
     char   data[32];
     size_t size;
+    bool   has_displacement;
 } S86_EffectiveAddressStr8;
 
-S86_EffectiveAddressStr8 S86_EffectiveAddressCalc(S86_BufferIterator *buffer_it, uint8_t rm, uint8_t mod, uint8_t w);
+S86_EffectiveAddressStr8 S86_EffectiveAddressCalc(S86_BufferIterator *buffer_it, uint8_t rm, uint8_t mod, uint8_t w, S86_Str8 seg_reg);
 
 // NOTE: Implementation
 // ============================================================================
@@ -429,7 +431,7 @@ void S86_PrintLnFmt(char const *fmt, ...)
 }
 
 S86_Str8 REGISTER_FIELD_ENCODING[2][8];
-S86_EffectiveAddressStr8 S86_EffectiveAddressCalc(S86_BufferIterator *buffer_it, uint8_t rm, uint8_t mod, uint8_t w)
+S86_EffectiveAddressStr8 S86_EffectiveAddressCalc(S86_BufferIterator *buffer_it, uint8_t rm, uint8_t mod, uint8_t w, S86_Str8 seg_reg)
 {
     // NOTE: Calculate displacement
     // =========================================================================
@@ -448,11 +450,18 @@ S86_EffectiveAddressStr8 S86_EffectiveAddressCalc(S86_BufferIterator *buffer_it,
     S86_EffectiveAddressStr8 result = {0};
     if (mod == 0b11) {
         S86_Str8 register_field = REGISTER_FIELD_ENCODING[w][rm];
-        memcpy(result.data, register_field.data, register_field.size);
-        result.size = register_field.size;
+        memcpy(result.data + result.size, register_field.data, register_field.size);
+        result.size += register_field.size;
     } else {
         // NOTE: Effective address calculation w/ displacement
         // =========================================================================
+        if (seg_reg.size) {
+            memcpy(result.data + result.size, seg_reg.data, seg_reg.size);
+            result.size += seg_reg.size;
+            result.data[result.size++] = ':';
+        }
+
+        result.has_displacement    = true;
         result.data[result.size++] = '[';
         if (direct_address) {
             result.size += snprintf(result.data + result.size,
@@ -812,6 +821,9 @@ int main(int argc, char **argv)
 
         [S86_InstructionType_LOCK]                         = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
                                                               .op_bits0 = 0b1111'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("lock")},
+
+        [S86_InstructionType_SEGMENT]                      = {.op_mask0 = 0b1110'0111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b0010'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("")},
     };
 
     S86_Str8 SEGMENT_REGISTER_NAME[] = {
@@ -824,7 +836,10 @@ int main(int argc, char **argv)
     // NOTE: Decode assembly
     // =========================================================================
     S86_PrintLn(S86_STR8("bits 16"));
+
     S86_BufferIterator buffer_it = S86_BufferIteratorInit(buffer);
+    S86_Str8 seg_reg             = {0};
+
     while (S86_BufferIteratorHasMoreBytes(buffer_it)) {
 
         char op_code_bytes[2]         = {0};
@@ -915,8 +930,8 @@ int main(int argc, char **argv)
                     w = op_code_bytes[0] & 0b0000'0001;
                 }
 
-                S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod, w);
-                if (effective_address.data[0] == '[')
+                S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod, w, seg_reg);
+                if (effective_address.has_displacement)
                     S86_PrintFmt(" %s", w ? "word" : "byte");
                 S86_PrintFmt(" %.*s", S86_STR8_FMT(effective_address));
 
@@ -959,6 +974,8 @@ int main(int argc, char **argv)
                 S86_PrintLnFmt(" %.*s", S86_STR8_FMT(reg_name));
             } break;
 
+            // NOTE: Instruction Pattern => [0b000'000DW | 0bAABB'BCCC | DISP-LO | DISP-HI | DATA-LO | DATA-HI]
+            // Where, D: optional, W: optional, AA: mod, BBB: reg, CCC: r/m
             case S86_InstructionType_ADDRegOrMemToOrFromReg:     /*FALLTHRU*/
             case S86_InstructionType_ADCRegOrMemWithRegToEither: /*FALLTHRU*/
             case S86_InstructionType_SUBRegOrMemToOrFromReg:     /*FALLTHRU*/
@@ -1009,7 +1026,7 @@ int main(int argc, char **argv)
                 } else {
                     // NOTE: Memory mode w/ effective address calculation
                     // =========================================================
-                    S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod, w);
+                    S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod, w, seg_reg);
                     S86_Str8 addr    = { .data = effective_address.data, .size = effective_address.size };
                     S86_Str8 dest_op = d ? REGISTER_FIELD_ENCODING[w][reg] : addr;
                     S86_Str8 src_op  = d ? addr                            : REGISTER_FIELD_ENCODING[w][reg];
@@ -1036,7 +1053,7 @@ int main(int argc, char **argv)
                 S86_ASSERT(mod < 4);
                 S86_ASSERT(rm  < 8);
 
-                S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod, w);
+                S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod, w, seg_reg);
 
                 // NOTE: Parse data payload
                 // =============================================================
@@ -1068,7 +1085,7 @@ int main(int argc, char **argv)
                 if (instruction_type == S86_InstructionType_MOVImmediateToRegOrMem) {
                     S86_PrintLnFmt(" %.*s, %s %u", effective_address.size, effective_address.data, w ? "word" : "byte", data);
                 } else {
-                    if (effective_address.data[0] == '[')
+                    if (effective_address.has_displacement)
                         S86_PrintFmt(" %s", w ? "word" : "byte", S86_STR8_FMT(effective_address));
 
                     S86_PrintFmt(" %.*s, ", S86_STR8_FMT(effective_address));
@@ -1257,9 +1274,14 @@ int main(int argc, char **argv)
                     // NOTE: Mnemonic instruction only, already printed
                     S86_Print(S86_STR8("\n"));
                 } else if (instruction_type == S86_InstructionType_LOCK) {
-                    // NOTE: Mnemonic prefix, no new line as the next instruction 
-                    // will be prefixed with this instruciton
+                    // NOTE: Mnemonic prefix, no new line as the next instruction
+                    // will be prefixed with this instruction
                     S86_Print(S86_STR8(" "));
+                } else if (instruction_type == S86_InstructionType_SEGMENT) {
+                    // NOTE: Mnemonic does not generate any assembly
+                    S86_ASSERT(op_code_size == 1);
+                    uint8_t sr = (op_code_bytes[0] & 0b0001'1000) >> 3;
+                    seg_reg    = SEGMENT_REGISTER_NAME[sr];
                 } else {
                     S86_Print(S86_STR8("\n"));
                     S86_ASSERT(!"Unhandled instruction");
