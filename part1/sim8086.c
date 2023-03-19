@@ -225,6 +225,8 @@ typedef enum S86_InstructionType {
     S86_InstructionType_HLT,
     S86_InstructionType_WAIT,
 
+    S86_InstructionType_LOCK,
+
     S86_InstructionType_Count,
 } S86_InstructionType;
 
@@ -807,6 +809,9 @@ int main(int argc, char **argv)
                                                               .op_bits0 = 0b1111'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("hlt")},
         [S86_InstructionType_WAIT]                         = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
                                                               .op_bits0 = 0b1001'1011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("wait")},
+
+        [S86_InstructionType_LOCK]                         = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b1111'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("lock")},
     };
 
     S86_Str8 SEGMENT_REGISTER_NAME[] = {
@@ -1251,6 +1256,10 @@ int main(int argc, char **argv)
                            instruction_type == S86_InstructionType_WAIT) {
                     // NOTE: Mnemonic instruction only, already printed
                     S86_Print(S86_STR8("\n"));
+                } else if (instruction_type == S86_InstructionType_LOCK) {
+                    // NOTE: Mnemonic prefix, no new line as the next instruction 
+                    // will be prefixed with this instruciton
+                    S86_Print(S86_STR8(" "));
                 } else {
                     S86_Print(S86_STR8("\n"));
                     S86_ASSERT(!"Unhandled instruction");
