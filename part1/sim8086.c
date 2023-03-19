@@ -126,6 +126,10 @@ typedef enum S86_InstructionType {
     S86_InstructionType_SBBImmediateFromRegOrMem,
     S86_InstructionType_SBBImmediateFromAccum,
 
+    S86_InstructionType_DECRegOrMem,
+    S86_InstructionType_DECReg,
+    S86_InstructionType_NEG,
+
     S86_InstructionType_CMPRegOrMemAndReg,
     S86_InstructionType_CMPImmediateWithRegOrMem,
     S86_InstructionType_CMPImmediateWithAccum,
@@ -552,6 +556,13 @@ int main(int argc, char **argv)
         [S86_InstructionType_SBBImmediateFromAccum]      = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b0001'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sbb")},
 
+        [S86_InstructionType_DECRegOrMem]                = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1111'1110, .op_bits1 = 0b0000'1000, .mnemonic = S86_STR8("dec")},
+        [S86_InstructionType_DECReg]                     = {.op_mask0 = 0b1111'1000, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0100'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("dec")},
+        [S86_InstructionType_NEG]                        = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1111'0110, .op_bits1 = 0b0001'1000, .mnemonic = S86_STR8("neg")},
+
         [S86_InstructionType_CMPRegOrMemAndReg]          = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b0011'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cmp")},
         [S86_InstructionType_CMPImmediateWithRegOrMem]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
@@ -661,20 +672,30 @@ int main(int argc, char **argv)
         S86_Print(instruction->mnemonic);
         switch (instruction_type) {
 
-            case S86_InstructionType_POPRegOrMem: /*FALLTHRU*/
             case S86_InstructionType_INCRegOrMem: /*FALLTHRU*/
+            case S86_InstructionType_DECRegOrMem: /*FALLTHRU*/
+            case S86_InstructionType_NEG:         /*FALLTHRU*/
+            case S86_InstructionType_POPRegOrMem: /*FALLTHRU*/
             case S86_InstructionType_PUSHRegOrMem: {
                 S86_ASSERT(op_code_size == 2);
                 uint8_t mod = (op_code_bytes[1] & 0b1100'0000) >> 6;
                 uint8_t rm  = (op_code_bytes[1] & 0b0000'0111) >> 0;
-                uint8_t w   = instruction_type == S86_InstructionType_INCRegOrMem ? (op_code_bytes[0] & 0b0000'0001) : 1;
                 S86_ASSERT(mod < 4); S86_ASSERT(rm  < 8);
+
+                uint8_t w   = 1;
+                if (instruction_type == S86_InstructionType_INCRegOrMem ||
+                    instruction_type == S86_InstructionType_DECRegOrMem ||
+                    instruction_type == S86_InstructionType_NEG) {
+                    w = op_code_bytes[0] & 0b0000'0001;
+                }
+
                 S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod, w);
                 if (effective_address.data[0] == '[')
                     S86_PrintFmt(" %s", w ? "word" : "byte");
                 S86_PrintLnFmt(" %.*s", S86_STR8_FMT(effective_address));
             } break;
 
+            case S86_InstructionType_DECReg:           /*FALLTHRU*/
             case S86_InstructionType_INCReg:           /*FALLTHRU*/
             case S86_InstructionType_XCHGRegWithAccum: /*FALLTHRU*/
             case S86_InstructionType_PUSHReg:          /*FALLTHRU*/
@@ -686,6 +707,7 @@ int main(int argc, char **argv)
                 if (instruction_type == S86_InstructionType_PUSHReg ||
                     instruction_type == S86_InstructionType_POPReg ||
                     instruction_type == S86_InstructionType_INCReg ||
+                    instruction_type == S86_InstructionType_DECReg ||
                     instruction_type == S86_InstructionType_XCHGRegWithAccum) {
                     uint8_t reg = (op_code_bytes[0] & 0b0000'0111) >> 0;
                     reg_name    = REGISTER_FIELD_ENCODING[/*w*/1][reg];
