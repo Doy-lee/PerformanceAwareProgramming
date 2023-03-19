@@ -171,6 +171,8 @@ typedef enum S86_InstructionType {
     S86_InstructionType_XORImmediateToRegOrMem,
     S86_InstructionType_XORImmediateToAccum,
 
+    S86_InstructionType_REP,
+
     S86_InstructionType_JE_JZ,
     S86_InstructionType_JL_JNGE,
     S86_InstructionType_JLE_JNG,
@@ -674,6 +676,9 @@ int main(int argc, char **argv)
         [S86_InstructionType_XORImmediateToAccum]        = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b0011'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("xor")},
 
+        [S86_InstructionType_REP]                        = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1111'0010, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("rep")},
+
         [S86_InstructionType_JE_JZ]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b0111'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("je")},
         [S86_InstructionType_JL_JNGE]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
@@ -1072,6 +1077,25 @@ int main(int argc, char **argv)
                     fmt = S86_STR8(" ax, [%u]");
                 }
                 S86_PrintLnFmt(fmt.data, addr);
+            } break;
+
+            case S86_InstructionType_REP: {
+                S86_ASSERT(op_code_size == 1);
+                uint8_t string_op = S86_BufferIteratorNextByte(&buffer_it);
+                uint8_t w_mask    = 0b0000'0001;
+                uint8_t w         = string_op & w_mask;
+
+                S86_Str8 string_type = {0};
+                switch (string_op & ~w_mask) {
+                    case 0b1010'0100: string_type = S86_STR8("movs"); break;
+                    case 0b1010'0110: string_type = S86_STR8("cmps"); break;
+                    case 0b1010'1110: string_type = S86_STR8("scas"); break;
+                    case 0b1010'1100: string_type = S86_STR8("lods"); break;
+                    case 0b1010'1010: string_type = S86_STR8("stos"); break;
+                    default: S86_ASSERT(!"Unhandled REP string type"); break;
+                }
+
+                S86_PrintLnFmt(" %.*s%c", S86_STR8_FMT(string_type), w ? 'w' : 'b');
             } break;
 
             default: {
