@@ -839,6 +839,7 @@ int main(int argc, char **argv)
 
     S86_BufferIterator buffer_it = S86_BufferIteratorInit(buffer);
     S86_Str8 seg_reg             = {0};
+    bool lock_prefix             = false;
 
     while (S86_BufferIteratorHasMoreBytes(buffer_it)) {
 
@@ -889,7 +890,6 @@ int main(int argc, char **argv)
 
         S86_Print(instruction->mnemonic);
         switch (instruction_type) {
-
             // NOTE: Instruction Pattern => [0b000'0000W | 0bAA00'0CCC | DISP-LO | DISP-HI]
             // Where, W: Optional, AA: mod, CCC: R/M
             case S86_InstructionType_JMPIndirectWithinSeg:  /*FALLTHRU*/
@@ -1000,10 +1000,18 @@ int main(int argc, char **argv)
                     instruction_type == S86_InstructionType_LEA ||
                     instruction_type == S86_InstructionType_LDS ||
                     instruction_type == S86_InstructionType_LES) {
+                    d = 1; // Destintation is always the register
                     if (instruction_type == S86_InstructionType_XCHGRegOrMemWithReg) {
-                        d = 0; // Destination is always the memory address
-                    } else  {
-                        d = 1; // Destination is always the register
+                        if (lock_prefix) {
+                            // NOTE: When we XCHG, NASM complains that the
+                            // instruction is not lockable, unless, the memory
+                            // operand comes first. Here we flip the direction
+                            // to ensure the memory operand is the destination.
+                            //
+                            // listing_0042_completionist_decode_disassembled.asm|319| warning: instruction is not lockable [-w+prefix-lock]
+                            d = 0;
+                        }
+                    } else {
                         w = 1; // Always 16 bit (load into register)
                     }
                 }
@@ -1213,7 +1221,9 @@ int main(int argc, char **argv)
             } break;
 
             // NOTE: Instruction Pattern => [0b000'00000 | DATA-LO | DATA-HI]
+            case S86_InstructionType_CALLDirectInterSeg: /*FALLTHRU*/
             case S86_InstructionType_CALLDirectWithinSeg: /*FALLTHRU*/
+            case S86_InstructionType_JMPDirectInterSeg: /*FALLTHRU*/
             case S86_InstructionType_RETWithinSegAddImmediateToSP: /*FALLTHRU*/
             case S86_InstructionType_INT: {
                 S86_ASSERT(op_code_size == 1);
@@ -1228,6 +1238,12 @@ int main(int argc, char **argv)
                     S86_PrintLnFmt(" [bp - %d]", S86_CAST(int16_t)data);
                 } else if (instruction_type == S86_InstructionType_RETWithinSegAddImmediateToSP) {
                     S86_PrintLnFmt(" %d", S86_CAST(int16_t)data);
+                } else if (instruction_type == S86_InstructionType_CALLDirectInterSeg ||
+                           instruction_type == S86_InstructionType_JMPDirectInterSeg) {
+                    uint8_t cs_lo = S86_BufferIteratorNextByte(&buffer_it);
+                    uint8_t cs_hi = S86_BufferIteratorNextByte(&buffer_it);
+                    uint16_t cs   = S86_CAST(uint16_t)cs_hi << 8 | (S86_CAST(uint16_t)cs_lo);
+                    S86_PrintLnFmt(" %u:%u", cs, data);
                 } else {
                     S86_PrintLnFmt(" %u", data);
                 }
@@ -1277,6 +1293,7 @@ int main(int argc, char **argv)
                     // NOTE: Mnemonic prefix, no new line as the next instruction
                     // will be prefixed with this instruction
                     S86_Print(S86_STR8(" "));
+                    lock_prefix = true;
                 } else if (instruction_type == S86_InstructionType_SEGMENT) {
                     // NOTE: Mnemonic does not generate any assembly
                     S86_ASSERT(op_code_size == 1);
@@ -1288,5 +1305,11 @@ int main(int argc, char **argv)
                 }
             } break;
         }
+
+        if (instruction_type != S86_InstructionType_LOCK)
+            lock_prefix = false;
+
+        if (instruction_type != S86_InstructionType_SEGMENT)
+            seg_reg.size = 0;
     }
 }
