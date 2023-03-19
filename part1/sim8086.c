@@ -215,6 +215,16 @@ typedef enum S86_InstructionType {
     S86_InstructionType_INTO,
     S86_InstructionType_IRET,
 
+    S86_InstructionType_CLC,
+    S86_InstructionType_CMC,
+    S86_InstructionType_STC,
+    S86_InstructionType_CLD,
+    S86_InstructionType_STD,
+    S86_InstructionType_CLI,
+    S86_InstructionType_STI,
+    S86_InstructionType_HLT,
+    S86_InstructionType_WAIT,
+
     S86_InstructionType_Count,
 } S86_InstructionType;
 
@@ -778,6 +788,25 @@ int main(int argc, char **argv)
                                                               .op_bits0 = 0b1100'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("into")},
         [S86_InstructionType_IRET]                         = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
                                                               .op_bits0 = 0b1100'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("iret")},
+
+        [S86_InstructionType_CLC]                          = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b1111'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("clc")},
+        [S86_InstructionType_CMC]                          = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b1111'0101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cmc")},
+        [S86_InstructionType_STC]                          = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b1111'1001, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("stc")},
+        [S86_InstructionType_CLD]                          = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b1111'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cld")},
+        [S86_InstructionType_STD]                          = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b1111'1101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("std")},
+        [S86_InstructionType_CLI]                          = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b1111'1010, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cli")},
+        [S86_InstructionType_STI]                          = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b1111'1011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sti")},
+        [S86_InstructionType_HLT]                          = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b1111'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("hlt")},
+        [S86_InstructionType_WAIT]                         = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                              .op_bits0 = 0b1001'1011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("wait")},
     };
 
     S86_Str8 SEGMENT_REGISTER_NAME[] = {
@@ -1194,23 +1223,32 @@ int main(int argc, char **argv)
                         sign = '-';
                     }
                     S86_PrintLnFmt(" $+2%c%d", sign, jump_offset);
-                } else if (instruction_type == S86_InstructionType_XLAT  ||
-                           instruction_type == S86_InstructionType_LAHF  ||
-                           instruction_type == S86_InstructionType_SAHF  ||
-                           instruction_type == S86_InstructionType_PUSHF ||
-                           instruction_type == S86_InstructionType_POPF  ||
-                           instruction_type == S86_InstructionType_DAA   ||
-                           instruction_type == S86_InstructionType_AAA   ||
-                           instruction_type == S86_InstructionType_DAS   ||
-                           instruction_type == S86_InstructionType_AAS   ||
-                           instruction_type == S86_InstructionType_AAM   ||
-                           instruction_type == S86_InstructionType_AAD   ||
-                           instruction_type == S86_InstructionType_CBW   ||
-                           instruction_type == S86_InstructionType_CWD   ||
+                } else if (instruction_type == S86_InstructionType_XLAT         ||
+                           instruction_type == S86_InstructionType_LAHF         ||
+                           instruction_type == S86_InstructionType_SAHF         ||
+                           instruction_type == S86_InstructionType_PUSHF        ||
+                           instruction_type == S86_InstructionType_POPF         ||
+                           instruction_type == S86_InstructionType_DAA          ||
+                           instruction_type == S86_InstructionType_AAA          ||
+                           instruction_type == S86_InstructionType_DAS          ||
+                           instruction_type == S86_InstructionType_AAS          ||
+                           instruction_type == S86_InstructionType_AAM          ||
+                           instruction_type == S86_InstructionType_AAD          ||
+                           instruction_type == S86_InstructionType_CBW          ||
+                           instruction_type == S86_InstructionType_CWD          ||
                            instruction_type == S86_InstructionType_RETWithinSeg ||
-                           instruction_type == S86_InstructionType_INT3 ||
-                           instruction_type == S86_InstructionType_INTO ||
-                           instruction_type == S86_InstructionType_IRET) {
+                           instruction_type == S86_InstructionType_INT3         ||
+                           instruction_type == S86_InstructionType_INTO         ||
+                           instruction_type == S86_InstructionType_IRET         ||
+                           instruction_type == S86_InstructionType_CLC          ||
+                           instruction_type == S86_InstructionType_CMC          ||
+                           instruction_type == S86_InstructionType_STC          ||
+                           instruction_type == S86_InstructionType_CLD          ||
+                           instruction_type == S86_InstructionType_STD          ||
+                           instruction_type == S86_InstructionType_CLI          ||
+                           instruction_type == S86_InstructionType_STI          ||
+                           instruction_type == S86_InstructionType_HLT          ||
+                           instruction_type == S86_InstructionType_WAIT) {
                     // NOTE: Mnemonic instruction only, already printed
                     S86_Print(S86_STR8("\n"));
                 } else {
