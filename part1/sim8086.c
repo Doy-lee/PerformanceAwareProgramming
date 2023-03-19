@@ -122,6 +122,10 @@ typedef enum S86_InstructionType {
     S86_InstructionType_SUBImmediateFromRegOrMem,
     S86_InstructionType_SUBImmediateFromAccum,
 
+    S86_InstructionType_SBBRegOrMemAndRegToEither,
+    S86_InstructionType_SBBImmediateFromRegOrMem,
+    S86_InstructionType_SBBImmediateFromAccum,
+
     S86_InstructionType_CMPRegOrMemAndReg,
     S86_InstructionType_CMPImmediateWithRegOrMem,
     S86_InstructionType_CMPImmediateWithAccum,
@@ -540,6 +544,14 @@ int main(int argc, char **argv)
                                                             .op_bits0 = 0b1000'0000, .op_bits1 = 0b0010'1000, .mnemonic = S86_STR8("sub")},
         [S86_InstructionType_SUBImmediateFromAccum]      = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b0010'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sub")},
+
+        [S86_InstructionType_SBBRegOrMemAndRegToEither]  = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0001'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sbb")},
+        [S86_InstructionType_SBBImmediateFromRegOrMem]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1000'0000, .op_bits1 = 0b0001'1000, .mnemonic = S86_STR8("sbb")},
+        [S86_InstructionType_SBBImmediateFromAccum]      = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0001'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sbb")},
+
         [S86_InstructionType_CMPRegOrMemAndReg]          = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b0011'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cmp")},
         [S86_InstructionType_CMPImmediateWithRegOrMem]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
@@ -690,14 +702,15 @@ int main(int argc, char **argv)
                 S86_PrintLnFmt(" %.*s", S86_STR8_FMT(reg_name));
             } break;
 
+            case S86_InstructionType_ADDRegOrMemToOrFromReg:     /*FALLTHRU*/
             case S86_InstructionType_ADCRegOrMemWithRegToEither: /*FALLTHRU*/
+            case S86_InstructionType_SUBRegOrMemToOrFromReg:     /*FALLTHRU*/
+            case S86_InstructionType_SBBRegOrMemAndRegToEither: /*FALLTHRU*/
             case S86_InstructionType_LEA:                        /*FALLTHRU*/
             case S86_InstructionType_LDS:                        /*FALLTHRU*/
             case S86_InstructionType_LES:                        /*FALLTHRU*/
             case S86_InstructionType_XCHGRegOrMemWithReg:        /*FALLTHRU*/
             case S86_InstructionType_CMPRegOrMemAndReg:          /*FALLTHRU*/
-            case S86_InstructionType_SUBRegOrMemToOrFromReg:     /*FALLTHRU*/
-            case S86_InstructionType_ADDRegOrMemToOrFromReg:     /*FALLTHRU*/
             case S86_InstructionType_MOVRegOrMemToOrFromReg: {
                 // NOTE: Instruction does not have opcode bits in the 2nd byte
                 S86_ASSERT(op_code_size == 1);
@@ -745,8 +758,9 @@ int main(int argc, char **argv)
 
             case S86_InstructionType_ADDImmediateToRegOrMem:   /*FALLTHRU*/
             case S86_InstructionType_ADCImmediateToRegOrMem:   /*FALLTHRU*/
-            case S86_InstructionType_CMPImmediateWithRegOrMem: /*FALLTHRU*/
             case S86_InstructionType_SUBImmediateFromRegOrMem: /*FALLTHRU*/
+            case S86_InstructionType_SBBImmediateFromRegOrMem:   /*FALLTHRU*/
+            case S86_InstructionType_CMPImmediateWithRegOrMem: /*FALLTHRU*/
             case S86_InstructionType_MOVImmediateToRegOrMem: {
                 S86_ASSERT(op_code_size == 2);
                 uint8_t w   = (op_code_bytes[0] & 0b0000'0001) >> 0;
@@ -767,6 +781,7 @@ int main(int argc, char **argv)
                     if ((instruction_type == S86_InstructionType_ADDImmediateToRegOrMem ||
                          instruction_type == S86_InstructionType_ADCImmediateToRegOrMem ||
                          instruction_type == S86_InstructionType_SUBImmediateFromRegOrMem ||
+                         instruction_type == S86_InstructionType_SBBImmediateFromRegOrMem ||
                          instruction_type == S86_InstructionType_CMPImmediateWithRegOrMem) && s) {
                         sign_extend_8bit_data = true;
                     } else {
@@ -795,10 +810,11 @@ int main(int argc, char **argv)
                 }
             } break;
 
-            case S86_InstructionType_CMPImmediateWithAccum: /*FALLTHRU*/
+            case S86_InstructionType_ADDImmediateToAccum:   /*FALLTHRU*/
+            case S86_InstructionType_ADCImmediateToAccum:   /*FALLTHRU*/
             case S86_InstructionType_SUBImmediateFromAccum: /*FALLTHRU*/
-            case S86_InstructionType_ADDImmediateToAccum: /*FALLTHRU*/
-            case S86_InstructionType_ADCImmediateToAccum: /*FALLTHRU*/
+            case S86_InstructionType_SBBImmediateFromAccum:   /*FALLTHRU*/
+            case S86_InstructionType_CMPImmediateWithAccum: /*FALLTHRU*/
             case S86_InstructionType_MOVImmediateToReg: {
                 // NOTE: Parse opcode control bits
                 // =============================================================
@@ -807,6 +823,7 @@ int main(int argc, char **argv)
                 if (instruction_type == S86_InstructionType_ADDImmediateToAccum ||
                     instruction_type == S86_InstructionType_ADCImmediateToAccum ||
                     instruction_type == S86_InstructionType_SUBImmediateFromAccum ||
+                    instruction_type == S86_InstructionType_SBBImmediateFromAccum ||
                     instruction_type == S86_InstructionType_CMPImmediateWithAccum) {
                     w = (op_code_bytes[0] & 0b0000'0001) >> 0;
                 } else {
@@ -831,6 +848,7 @@ int main(int argc, char **argv)
                     S86_ASSERT(instruction_type == S86_InstructionType_ADDImmediateToAccum ||
                                instruction_type == S86_InstructionType_ADCImmediateToAccum ||
                                instruction_type == S86_InstructionType_SUBImmediateFromAccum ||
+                               instruction_type == S86_InstructionType_SBBImmediateFromAccum ||
                                instruction_type == S86_InstructionType_CMPImmediateWithAccum);
                     if (w) {
                         dest_register = S86_STR8("ax");
