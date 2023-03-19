@@ -108,6 +108,10 @@ typedef enum S86_InstructionType {
     S86_InstructionType_ADDImmediateToRegOrMem,
     S86_InstructionType_ADDImmediateToAccum,
 
+    S86_InstructionType_ADCRegOrMemWithRegToEither,
+    S86_InstructionType_ADCImmediateToRegOrMem,
+    S86_InstructionType_ADCImmediateToAccum,
+
     S86_InstructionType_SUBRegOrMemToOrFromReg,
     S86_InstructionType_SUBImmediateFromRegOrMem,
     S86_InstructionType_SUBImmediateFromAccum,
@@ -506,6 +510,14 @@ int main(int argc, char **argv)
                                                           .op_bits0 = 0b1000'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("add")},
         [S86_InstructionType_ADDImmediateToAccum]      = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
                                                           .op_bits0 = 0b0000'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("add")},
+
+        [S86_InstructionType_ADCRegOrMemWithRegToEither] = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0001'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("adc")},
+        [S86_InstructionType_ADCImmediateToRegOrMem]     = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1000'0000, .op_bits1 = 0b0001'0000, .mnemonic = S86_STR8("adc")},
+        [S86_InstructionType_ADCImmediateToAccum]        = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0001'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("adc")},
+
         [S86_InstructionType_SUBRegOrMemToOrFromReg]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
                                                           .op_bits0 = 0b0010'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sub")},
         [S86_InstructionType_SUBImmediateFromRegOrMem] = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
@@ -650,13 +662,14 @@ int main(int argc, char **argv)
                 S86_PrintLnFmt(" %.*s", S86_STR8_FMT(reg_name));
             } break;
 
-            case S86_InstructionType_LEA: /*FALLTHRU*/
-            case S86_InstructionType_LDS: /*FALLTHRU*/
-            case S86_InstructionType_LES: /*FALLTHRU*/
-            case S86_InstructionType_XCHGRegOrMemWithReg: /*FALLTHRU*/
-            case S86_InstructionType_CMPRegOrMemAndReg: /*FALLTHRU*/
-            case S86_InstructionType_SUBRegOrMemToOrFromReg: /*FALLTHRU*/
-            case S86_InstructionType_ADDRegOrMemToOrFromReg: /*FALLTHRU*/
+            case S86_InstructionType_ADCRegOrMemWithRegToEither: /*FALLTHRU*/
+            case S86_InstructionType_LEA:                        /*FALLTHRU*/
+            case S86_InstructionType_LDS:                        /*FALLTHRU*/
+            case S86_InstructionType_LES:                        /*FALLTHRU*/
+            case S86_InstructionType_XCHGRegOrMemWithReg:        /*FALLTHRU*/
+            case S86_InstructionType_CMPRegOrMemAndReg:          /*FALLTHRU*/
+            case S86_InstructionType_SUBRegOrMemToOrFromReg:     /*FALLTHRU*/
+            case S86_InstructionType_ADDRegOrMemToOrFromReg:     /*FALLTHRU*/
             case S86_InstructionType_MOVRegOrMemToOrFromReg: {
                 // NOTE: Instruction does not have opcode bits in the 2nd byte
                 S86_ASSERT(op_code_size == 1);
@@ -702,9 +715,10 @@ int main(int argc, char **argv)
                 }
             } break;
 
+            case S86_InstructionType_ADDImmediateToRegOrMem:   /*FALLTHRU*/
+            case S86_InstructionType_ADCImmediateToRegOrMem:   /*FALLTHRU*/
             case S86_InstructionType_CMPImmediateWithRegOrMem: /*FALLTHRU*/
             case S86_InstructionType_SUBImmediateFromRegOrMem: /*FALLTHRU*/
-            case S86_InstructionType_ADDImmediateToRegOrMem: /*FALLTHRU*/
             case S86_InstructionType_MOVImmediateToRegOrMem: {
                 S86_ASSERT(op_code_size == 2);
                 uint8_t w   = (op_code_bytes[0] & 0b0000'0001) >> 0;
@@ -723,6 +737,7 @@ int main(int argc, char **argv)
                 bool sign_extend_8bit_data = false;
                 if (w) { // 16 bit data
                     if ((instruction_type == S86_InstructionType_ADDImmediateToRegOrMem ||
+                         instruction_type == S86_InstructionType_ADCImmediateToRegOrMem ||
                          instruction_type == S86_InstructionType_SUBImmediateFromRegOrMem ||
                          instruction_type == S86_InstructionType_CMPImmediateWithRegOrMem) && s) {
                         sign_extend_8bit_data = true;
@@ -741,31 +756,28 @@ int main(int argc, char **argv)
                 if (instruction_type == S86_InstructionType_MOVImmediateToRegOrMem) {
                     S86_PrintLnFmt(" %.*s, %s %u", effective_address.size, effective_address.data, w ? "word" : "byte", data);
                 } else {
-                    if (effective_address.data[0] == '[') {
-                        if (sign_extend_8bit_data) {
-                            S86_PrintLnFmt(" %s %.*s, %d", w ? "word" : "byte", effective_address.size, effective_address.data, (int16_t)data);
-                        } else {
-                            S86_PrintLnFmt(" %s %.*s, %u", w ? "word" : "byte", effective_address.size, effective_address.data, data);
-                        }
-                    } else {
-                        if (sign_extend_8bit_data) {
-                            S86_PrintLnFmt(" %.*s, %d", effective_address.size, effective_address.data, (int16_t)data);
-                        } else {
-                            S86_PrintLnFmt(" %.*s, %u", effective_address.size, effective_address.data, data);
-                        }
-                    }
+                    if (effective_address.data[0] == '[')
+                        S86_PrintFmt(" %s", w ? "word" : "byte", S86_STR8_FMT(effective_address));
+
+                    S86_PrintFmt(" %.*s, ", S86_STR8_FMT(effective_address));
+                    if (sign_extend_8bit_data)
+                        S86_PrintLnFmt("%d", (int16_t)data);
+                    else
+                        S86_PrintLnFmt("%u", data);
                 }
             } break;
 
             case S86_InstructionType_CMPImmediateWithAccum: /*FALLTHRU*/
             case S86_InstructionType_SUBImmediateFromAccum: /*FALLTHRU*/
             case S86_InstructionType_ADDImmediateToAccum: /*FALLTHRU*/
+            case S86_InstructionType_ADCImmediateToAccum: /*FALLTHRU*/
             case S86_InstructionType_MOVImmediateToReg: {
                 // NOTE: Parse opcode control bits
                 // =============================================================
                 S86_ASSERT(op_code_size == 1);
                 uint8_t w   = 0;
                 if (instruction_type == S86_InstructionType_ADDImmediateToAccum ||
+                    instruction_type == S86_InstructionType_ADCImmediateToAccum ||
                     instruction_type == S86_InstructionType_SUBImmediateFromAccum ||
                     instruction_type == S86_InstructionType_CMPImmediateWithAccum) {
                     w = (op_code_bytes[0] & 0b0000'0001) >> 0;
@@ -789,6 +801,7 @@ int main(int argc, char **argv)
                     dest_register = REGISTER_FIELD_ENCODING[w][reg];
                 } else {
                     S86_ASSERT(instruction_type == S86_InstructionType_ADDImmediateToAccum ||
+                               instruction_type == S86_InstructionType_ADCImmediateToAccum ||
                                instruction_type == S86_InstructionType_SUBImmediateFromAccum ||
                                instruction_type == S86_InstructionType_CMPImmediateWithAccum);
                     if (w) {
