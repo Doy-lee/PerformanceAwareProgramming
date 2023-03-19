@@ -112,6 +112,9 @@ typedef enum S86_InstructionType {
     S86_InstructionType_ADCImmediateToRegOrMem,
     S86_InstructionType_ADCImmediateToAccum,
 
+    S86_InstructionType_INCRegOrMem,
+    S86_InstructionType_INCReg,
+
     S86_InstructionType_SUBRegOrMemToOrFromReg,
     S86_InstructionType_SUBImmediateFromRegOrMem,
     S86_InstructionType_SUBImmediateFromAccum,
@@ -442,74 +445,74 @@ int main(int argc, char **argv)
     REGISTER_FIELD_ENCODING[0b1][7] = S86_STR8("di");
 
     S86_Instruction const S86_INSTRUCTIONS[S86_InstructionType_Count] = {
-        [S86_InstructionType_MOVRegOrMemToOrFromReg]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1000'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
-        [S86_InstructionType_MOVImmediateToRegOrMem]   = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
-                                                          .op_bits0 = 0b1100'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
-        [S86_InstructionType_MOVImmediateToReg]        = {.op_mask0 = 0b1111'0000, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1011'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
-        [S86_InstructionType_MOVMemToAccum]            = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1010'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
-        [S86_InstructionType_MOVAccumToMem]            = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1010'0010, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
-        [S86_InstructionType_MOVRegOrMemToSegReg]      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0010'0000,
-                                                          .op_bits0 = 0b1000'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
-        [S86_InstructionType_MOVSegRegToRegOrMem]      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0010'0000,
-                                                          .op_bits0 = 0b1000'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
+        [S86_InstructionType_MOVRegOrMemToOrFromReg]     = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1000'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
+        [S86_InstructionType_MOVImmediateToRegOrMem]     = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1100'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
+        [S86_InstructionType_MOVImmediateToReg]          = {.op_mask0 = 0b1111'0000, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1011'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
+        [S86_InstructionType_MOVMemToAccum]              = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1010'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
+        [S86_InstructionType_MOVAccumToMem]              = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1010'0010, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
+        [S86_InstructionType_MOVRegOrMemToSegReg]        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0010'0000,
+                                                            .op_bits0 = 0b1000'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
+        [S86_InstructionType_MOVSegRegToRegOrMem]        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0010'0000,
+                                                            .op_bits0 = 0b1000'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("mov")},
 
-        [S86_InstructionType_PUSHRegOrMem]             = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0011'1000,
-                                                          .op_bits0 = 0b1111'1111, .op_bits1 = 0b0011'0000, .mnemonic = S86_STR8("push")},
-        [S86_InstructionType_PUSHReg]                  = {.op_mask0 = 0b1111'1000, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0101'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("push")},
-        [S86_InstructionType_PUSHSegReg]               = {.op_mask0 = 0b1110'0111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0000'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("push")},
+        [S86_InstructionType_PUSHRegOrMem]               = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1111'1111, .op_bits1 = 0b0011'0000, .mnemonic = S86_STR8("push")},
+        [S86_InstructionType_PUSHReg]                    = {.op_mask0 = 0b1111'1000, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0101'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("push")},
+        [S86_InstructionType_PUSHSegReg]                 = {.op_mask0 = 0b1110'0111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0000'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("push")},
 
-        [S86_InstructionType_POPRegOrMem]              = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0011'1000,
-                                                          .op_bits0 = 0b1000'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("pop")},
-        [S86_InstructionType_POPReg]                   = {.op_mask0 = 0b1111'1000, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0101'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("pop")},
-        [S86_InstructionType_POPSegReg]                = {.op_mask0 = 0b1110'0111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0000'0111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("pop")},
+        [S86_InstructionType_POPRegOrMem]                = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1000'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("pop")},
+        [S86_InstructionType_POPReg]                     = {.op_mask0 = 0b1111'1000, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0101'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("pop")},
+        [S86_InstructionType_POPSegReg]                  = {.op_mask0 = 0b1110'0111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0000'0111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("pop")},
 
-        [S86_InstructionType_XCHGRegOrMemWithReg]      = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1000'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("xchg")},
-        [S86_InstructionType_XCHGRegWithAccum]         = {.op_mask0 = 0b1111'1000, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1001'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("xchg")},
+        [S86_InstructionType_XCHGRegOrMemWithReg]        = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1000'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("xchg")},
+        [S86_InstructionType_XCHGRegWithAccum]           = {.op_mask0 = 0b1111'1000, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1001'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("xchg")},
 
-        [S86_InstructionType_INFixedPort]              = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1110'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("in")},
-        [S86_InstructionType_INVariablePort]           = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1110'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("in")},
+        [S86_InstructionType_INFixedPort]                = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1110'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("in")},
+        [S86_InstructionType_INVariablePort]             = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1110'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("in")},
 
-        [S86_InstructionType_OUTFixedPort]             = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1110'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("out")},
-        [S86_InstructionType_OUTVariablePort]          = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1110'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("out")},
+        [S86_InstructionType_OUTFixedPort]               = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1110'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("out")},
+        [S86_InstructionType_OUTVariablePort]            = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1110'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("out")},
 
-        [S86_InstructionType_XLAT]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1101'0111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("xlat")},
+        [S86_InstructionType_XLAT]                       = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1101'0111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("xlat")},
 
-        [S86_InstructionType_LEA]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1000'1101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("lea")},
-        [S86_InstructionType_LDS]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1100'0101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("lds")},
-        [S86_InstructionType_LES]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1100'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("les")},
-        [S86_InstructionType_LAHF]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1001'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("lahf")},
-        [S86_InstructionType_SAHF]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1001'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sahf")},
-        [S86_InstructionType_PUSHF]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1001'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("pushf")},
-        [S86_InstructionType_POPF]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1001'1101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("popf")},
+        [S86_InstructionType_LEA]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1000'1101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("lea")},
+        [S86_InstructionType_LDS]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1100'0101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("lds")},
+        [S86_InstructionType_LES]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1100'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("les")},
+        [S86_InstructionType_LAHF]                       = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1001'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("lahf")},
+        [S86_InstructionType_SAHF]                       = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1001'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sahf")},
+        [S86_InstructionType_PUSHF]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1001'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("pushf")},
+        [S86_InstructionType_POPF]                       = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1001'1101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("popf")},
 
-        [S86_InstructionType_ADDRegOrMemToOrFromReg]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0000'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("add")},
-        [S86_InstructionType_ADDImmediateToRegOrMem]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
-                                                          .op_bits0 = 0b1000'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("add")},
-        [S86_InstructionType_ADDImmediateToAccum]      = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0000'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("add")},
+        [S86_InstructionType_ADDRegOrMemToOrFromReg]     = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0000'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("add")},
+        [S86_InstructionType_ADDImmediateToRegOrMem]     = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1000'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("add")},
+        [S86_InstructionType_ADDImmediateToAccum]        = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0000'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("add")},
 
         [S86_InstructionType_ADCRegOrMemWithRegToEither] = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b0001'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("adc")},
@@ -518,58 +521,64 @@ int main(int argc, char **argv)
         [S86_InstructionType_ADCImmediateToAccum]        = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
                                                             .op_bits0 = 0b0001'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("adc")},
 
-        [S86_InstructionType_SUBRegOrMemToOrFromReg]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0010'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sub")},
-        [S86_InstructionType_SUBImmediateFromRegOrMem] = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
-                                                          .op_bits0 = 0b1000'0000, .op_bits1 = 0b0010'1000, .mnemonic = S86_STR8("sub")},
-        [S86_InstructionType_SUBImmediateFromAccum]    = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0010'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sub")},
-        [S86_InstructionType_CMPRegOrMemAndReg]        = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0011'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cmp")},
-        [S86_InstructionType_CMPImmediateWithRegOrMem] = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
-                                                          .op_bits0 = 0b1000'0000, .op_bits1 = 0b0011'1000, .mnemonic = S86_STR8("cmp")},
-        [S86_InstructionType_CMPImmediateWithAccum]    = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0011'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cmp")},
-        [S86_InstructionType_JE_JZ]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("je")},
-        [S86_InstructionType_JL_JNGE]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jl")},
-        [S86_InstructionType_JLE_JNG]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jle")},
-        [S86_InstructionType_JB_JNAE]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'0010, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jb")},
-        [S86_InstructionType_JBE_JNA]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jbe")},
-        [S86_InstructionType_JP_JPE]                   = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'1010, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jp")},
-        [S86_InstructionType_JO]                       = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jo")},
-        [S86_InstructionType_JS]                       = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("js")},
-        [S86_InstructionType_JNE_JNZ]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'0101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnz")},
-        [S86_InstructionType_JNL_JGE]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'1101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnl")},
-        [S86_InstructionType_JNLE_JG]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jg")},
-        [S86_InstructionType_JNB_JAE]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'0011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnb")},
-        [S86_InstructionType_JNBE_JA]                  = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'0111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("ja")},
-        [S86_InstructionType_JNP_JO]                   = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'1011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnp")},
-        [S86_InstructionType_JNO]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'0001, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jno")},
-        [S86_InstructionType_JNS]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b0111'1001, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jns")},
-        [S86_InstructionType_LOOP]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1110'0010, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("loop")},
-        [S86_InstructionType_LOOPZ_LOOPE]              = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1110'0001, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("loopz")},
-        [S86_InstructionType_LOOPNZ_LOOPNE]            = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1110'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("loopnz")},
-        [S86_InstructionType_JCXZ]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
-                                                          .op_bits0 = 0b1110'0011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jcxz")},
+        [S86_InstructionType_INCRegOrMem]                = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1111'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("inc")},
+
+        [S86_InstructionType_INCReg]                     = {.op_mask0 = 0b1111'1000, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0100'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("inc")},
+
+        [S86_InstructionType_SUBRegOrMemToOrFromReg]     = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0010'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sub")},
+        [S86_InstructionType_SUBImmediateFromRegOrMem]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1000'0000, .op_bits1 = 0b0010'1000, .mnemonic = S86_STR8("sub")},
+        [S86_InstructionType_SUBImmediateFromAccum]      = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0010'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("sub")},
+        [S86_InstructionType_CMPRegOrMemAndReg]          = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0011'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cmp")},
+        [S86_InstructionType_CMPImmediateWithRegOrMem]   = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0011'1000,
+                                                            .op_bits0 = 0b1000'0000, .op_bits1 = 0b0011'1000, .mnemonic = S86_STR8("cmp")},
+        [S86_InstructionType_CMPImmediateWithAccum]      = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0011'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("cmp")},
+        [S86_InstructionType_JE_JZ]                      = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'0100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("je")},
+        [S86_InstructionType_JL_JNGE]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'1100, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jl")},
+        [S86_InstructionType_JLE_JNG]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'1110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jle")},
+        [S86_InstructionType_JB_JNAE]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'0010, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jb")},
+        [S86_InstructionType_JBE_JNA]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jbe")},
+        [S86_InstructionType_JP_JPE]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'1010, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jp")},
+        [S86_InstructionType_JO]                         = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jo")},
+        [S86_InstructionType_JS]                         = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("js")},
+        [S86_InstructionType_JNE_JNZ]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'0101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnz")},
+        [S86_InstructionType_JNL_JGE]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'1101, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnl")},
+        [S86_InstructionType_JNLE_JG]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'1111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jg")},
+        [S86_InstructionType_JNB_JAE]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'0011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnb")},
+        [S86_InstructionType_JNBE_JA]                    = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'0111, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("ja")},
+        [S86_InstructionType_JNP_JO]                     = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'1011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jnp")},
+        [S86_InstructionType_JNO]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'0001, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jno")},
+        [S86_InstructionType_JNS]                        = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b0111'1001, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jns")},
+        [S86_InstructionType_LOOP]                       = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1110'0010, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("loop")},
+        [S86_InstructionType_LOOPZ_LOOPE]                = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1110'0001, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("loopz")},
+        [S86_InstructionType_LOOPNZ_LOOPNE]              = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1110'0000, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("loopnz")},
+        [S86_InstructionType_JCXZ]                       = {.op_mask0 = 0b1111'1111, .op_mask1 = 0b0000'0000,
+                                                            .op_bits0 = 0b1110'0011, .op_bits1 = 0b0000'0000, .mnemonic = S86_STR8("jcxz")},
     };
 
     S86_Str8 SEGMENT_REGISTER_NAME[] = {
@@ -634,23 +643,31 @@ int main(int argc, char **argv)
         switch (instruction_type) {
 
             case S86_InstructionType_POPRegOrMem: /*FALLTHRU*/
+            case S86_InstructionType_INCRegOrMem: /*FALLTHRU*/
             case S86_InstructionType_PUSHRegOrMem: {
                 S86_ASSERT(op_code_size == 2);
                 uint8_t mod = (op_code_bytes[1] & 0b1100'0000) >> 6;
                 uint8_t rm  = (op_code_bytes[1] & 0b0000'0111) >> 0;
+                uint8_t w   = instruction_type == S86_InstructionType_INCRegOrMem ? (op_code_bytes[0] & 0b0000'0001) : 1;
                 S86_ASSERT(mod < 4); S86_ASSERT(rm  < 8);
-                S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod, 0 /*w*/);
-                S86_PrintLnFmt(" word %.*s", S86_STR8_FMT(effective_address));
+                S86_EffectiveAddressStr8 effective_address = S86_EffectiveAddressCalc(&buffer_it, rm, mod, w);
+                if (effective_address.data[0] == '[')
+                    S86_PrintFmt(" %s", w ? "word" : "byte");
+                S86_PrintLnFmt(" %.*s", S86_STR8_FMT(effective_address));
             } break;
 
-            case S86_InstructionType_PUSHReg:    /*FALLTHRU*/
-            case S86_InstructionType_POPReg:     /*FALLTHRU*/
-            case S86_InstructionType_PUSHSegReg: /*FALLTHRU*/
+            case S86_InstructionType_INCReg:           /*FALLTHRU*/
+            case S86_InstructionType_XCHGRegWithAccum: /*FALLTHRU*/
+            case S86_InstructionType_PUSHReg:          /*FALLTHRU*/
+            case S86_InstructionType_POPReg:           /*FALLTHRU*/
+            case S86_InstructionType_PUSHSegReg:       /*FALLTHRU*/
             case S86_InstructionType_POPSegReg: {
                 S86_ASSERT(op_code_size == 1);
                 S86_Str8 reg_name = {0};
                 if (instruction_type == S86_InstructionType_PUSHReg ||
-                    instruction_type == S86_InstructionType_POPReg) {
+                    instruction_type == S86_InstructionType_POPReg ||
+                    instruction_type == S86_InstructionType_INCReg ||
+                    instruction_type == S86_InstructionType_XCHGRegWithAccum) {
                     uint8_t reg = (op_code_bytes[0] & 0b0000'0111) >> 0;
                     reg_name    = REGISTER_FIELD_ENCODING[/*w*/1][reg];
                 } else {
@@ -659,6 +676,10 @@ int main(int argc, char **argv)
                     uint8_t sr = (op_code_bytes[0] & 0b0001'1000) >> 3;
                     reg_name   = SEGMENT_REGISTER_NAME[sr];
                 }
+
+                if (instruction_type == S86_InstructionType_XCHGRegWithAccum)
+                    S86_Print(S86_STR8(" ax,"));
+
                 S86_PrintLnFmt(" %.*s", S86_STR8_FMT(reg_name));
             } break;
 
@@ -815,13 +836,6 @@ int main(int argc, char **argv)
                 S86_PrintLnFmt(" %.*s, %d", S86_STR8_FMT(dest_register), (int16_t)data);
             } break;
 
-            case S86_InstructionType_XCHGRegWithAccum: {
-                S86_ASSERT(op_code_size == 1);
-                uint8_t reg       = (op_code_bytes[0] & 0b0000'0111) >> 0;
-                S86_Str8 reg_name = REGISTER_FIELD_ENCODING[1 /*w*/][reg];
-                S86_PrintLnFmt(" ax, %.*s", S86_STR8_FMT(reg_name));
-            } break;
-
             case S86_InstructionType_INFixedPort: /*FALLTHRU*/
             case S86_InstructionType_INVariablePort: /*FALLTHRU*/
             case S86_InstructionType_OUTFixedPort: /*FALLTHRU*/
@@ -885,6 +899,7 @@ int main(int argc, char **argv)
                     // NOTE: Mnemonic instruction only, already printed
                     S86_Print(S86_STR8("\n"));
                 } else {
+                    S86_Print(S86_STR8("\n"));
                     S86_ASSERT(!"Unhandled instruction");
                 }
             } break;
