@@ -178,10 +178,77 @@ typedef struct S86_Instruction {
     S86_Str8 mnemonic;
 } S86_Instruction;
 
+typedef enum S86_RegisterType {
+    S86_RegisterType_AL,
+    S86_RegisterType_CL,
+    S86_RegisterType_DL,
+    S86_RegisterType_BL,
+    S86_RegisterType_AH,
+    S86_RegisterType_CH,
+    S86_RegisterType_DH,
+    S86_RegisterType_BH,
+
+    S86_RegisterType_AX,
+    S86_RegisterType_CX,
+    S86_RegisterType_DX,
+    S86_RegisterType_BX,
+    S86_RegisterType_SP,
+    S86_RegisterType_BP,
+    S86_RegisterType_SI,
+    S86_RegisterType_DI,
+
+    S86_RegisterType_BX_SI,
+    S86_RegisterType_BX_DI,
+    S86_RegisterType_BP_SI,
+    S86_RegisterType_BP_DI,
+
+    S86_RegisterType_DirectAddress,
+    S86_RegisterType_Immediate,
+} S86_RegisterType;
+
+typedef enum S86_SegmentRegisterType {
+    S86_SegmentRegisterType_Invalid,
+    S86_SegmentRegisterType_ES,
+    S86_SegmentRegisterType_CS,
+    S86_SegmentRegisterType_SS,
+    S86_SegmentRegisterType_DS,
+    S86_SegmentRegisterType_Count,
+} S86_SegmentRegisterType;
+
 typedef struct S86_EffectiveAddressStr8 {
-    char   data[32];
-    size_t size;
-    bool   has_displacement;
+    S86_SegmentRegisterType seg_reg_type;
+    S86_RegisterType        reg_type;
+    int32_t                 displacement;
+    char                    data[32];
+    size_t                  size;
+    bool                    has_displacement;
 } S86_EffectiveAddressStr8;
 
-S86_EffectiveAddressStr8 S86_EffectiveAddressCalc(S86_BufferIterator *buffer_it, uint8_t rm, uint8_t mod, uint8_t w, S86_Str8 seg_reg);
+typedef enum S86_EffectiveAddress {
+    S86_EffectiveAddress_None,
+    S86_EffectiveAddress_Src,
+    S86_EffectiveAddress_Dest,
+} S86_EffectiveAddress;
+
+typedef enum S86_WidePrefix {
+    S86_WidePrefix_None,
+    S86_WidePrefix_Src,
+    S86_WidePrefix_Dest,
+} S86_WidePrefix;
+
+
+typedef struct S86_AsmOp {
+    bool                    effective_addr_wide_prefix;
+    S86_EffectiveAddress    effective_addr;
+    bool                    has_displacement;
+    bool                    lock;
+    bool                    wide;
+    S86_WidePrefix          wide_prefix;
+    S86_RegisterType        src;
+    S86_RegisterType        dest;
+    int32_t                 displacement;
+    int32_t                 immediate;
+    S86_SegmentRegisterType seg_reg;
+} S86_AsmOp;
+
+S86_EffectiveAddressStr8 S86_EffectiveAddressCalc(S86_BufferIterator *buffer_it, uint8_t rm, uint8_t mod, uint8_t w, S86_SegmentRegisterType seg_reg);
