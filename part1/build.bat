@@ -13,6 +13,8 @@ copy /Y %script_dir%\listing_0039_more_movs %build_dir% 1>NUL
 copy /Y %script_dir%\listing_0040_challenge_movs %build_dir% 1>NUL
 copy /Y %script_dir%\listing_0041_add_sub_cmp_jnz %build_dir% 1>NUL
 copy /Y %script_dir%\listing_0042_completionist_decode %build_dir% 1>NUL
+copy /Y %script_dir%\listing_0043_immediate_movs %build_dir% 1>NUL
+copy /Y %script_dir%\listing_0043_immediate_movs.txt %build_dir% 1>NUL
 
 REM Build
 REM ===========================================================================
@@ -51,3 +53,7 @@ set listing_0042=%build_dir%\listing_0042_completionist_decode
 %build_dir%\sim8086.exe %listing_0042% > %listing_0042%_disassembled.asm
 nasm %listing_0042%_disassembled.asm
 fc /B %listing_0042% %listing_0042%_disassembled || exit /b 1
+
+set listing_0043=%build_dir%\listing_0043_immediate_movs
+%build_dir%\sim8086.exe --exec %listing_0043% > %listing_0043%_disassembled.txt
+fc /N %listing_0043%.txt %listing_0043%_disassembled.txt || exit /b 1

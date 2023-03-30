@@ -1,5 +1,11 @@
 // NOTE: Implementation
 // ============================================================================
+bool S86_Str8_Equals(S86_Str8 lhs, S86_Str8 rhs)
+{
+    bool result = lhs.size == rhs.size && memcmp(lhs.data, rhs.data, lhs.size) == 0;
+    return result;
+}
+
 bool S86_BufferIsValid(S86_Buffer buffer)
 {
     bool result = buffer.data && buffer.size;

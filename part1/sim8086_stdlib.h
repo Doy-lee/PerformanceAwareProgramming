@@ -39,6 +39,8 @@ typedef struct S86_Str8 {
 #define S86_STR8(string) (S86_Str8){.data = (string), .size = S86_ARRAY_UCOUNT(string) - 1 }
 #define S86_STR8_FMT(string) (int)((string).size), (string).data
 
+bool S86_Str8_Equals(S86_Str8 lhs, S86_Str8 rhs);
+
 // NOTE: Buffer
 // ============================================================================
 typedef struct S86_Buffer {

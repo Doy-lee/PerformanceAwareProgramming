@@ -3,6 +3,17 @@
 
 #include "sim8086_stdlib.c"
 
+typedef struct RegisterFile {
+    uint16_t ax;
+    uint16_t cx;
+    uint16_t dx;
+    uint16_t bx;
+    uint16_t sp;
+    uint16_t bp;
+    uint16_t si;
+    uint16_t di;
+} RegisterFile;
+
 S86_Str8 S86_MnemonicStr8(S86_Mnemonic type)
 {
     S86_Str8 result = {0};
@@ -256,8 +267,6 @@ void S86_PrintOpcode(S86_Opcode opcode)
 
     if (opcode.mnemonic == S86_Mnemonic_LOCK)
         S86_Print(S86_STR8(" "));
-    else
-        S86_Print(S86_STR8("\n"));
 }
 
 void S86_DecodeEffectiveAddr(S86_Opcode *opcode, S86_BufferIterator *buffer_it, uint8_t rm, uint8_t mod, uint8_t w)
@@ -766,17 +775,40 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
     return result;
 }
 
+#define PRINT_USAGE S86_PrintLn(S86_STR8("usage: sim8086.exe [--exec] <binary asm file>"))
 int main(int argc, char **argv)
 {
     // NOTE: Argument handling
     // =========================================================================
-    if (argc != 2) {
-        S86_PrintLn(S86_STR8("usage: sim8086.exe <binary asm file>"));
+    if (argc != 2 && argc != 3) {
+        PRINT_USAGE;
         return -1;
     }
 
-    char const *file_path = argv[1];
-    S86_Buffer buffer     = S86_FileRead(file_path);
+    bool exec_mode        = false;
+    char const *file_path = NULL;
+    if (argc == 3) {
+        S86_Str8 exec_mode_str8 = {argv[1], strlen(argv[1])};
+        file_path               = argv[2];
+        if (!S86_Str8_Equals(exec_mode_str8, S86_STR8("--exec"))) {
+            PRINT_USAGE;
+            return -1;
+        }
+        exec_mode = true;
+    } else {
+        file_path = argv[1];
+    }
+
+    char const *file_name = file_path;
+    size_t file_path_size = strlen(file_path);
+    for (size_t index = file_path_size - 1; index < file_path_size; index--) {
+        if (file_path[index] == '\\' || file_path[index] == '/') {
+            file_name = file_path + index + 1;
+            break;
+        }
+    }
+
+    S86_Buffer buffer = S86_FileRead(file_path);
     if (!S86_BufferIsValid(buffer)) {
         S86_PrintLnFmt("File read failed [path=\"%s\"]", argv[1], buffer.size);
         return -1;
@@ -1076,11 +1108,46 @@ int main(int argc, char **argv)
 
     // NOTE: Decode assembly
     // =========================================================================
-    S86_PrintLn(S86_STR8("bits 16"));
+    if (exec_mode)
+        S86_PrintLnFmt("--- test\\%s execution ---", file_name);
+    else
+        S86_PrintLn(S86_STR8("bits 16"));
 
+    RegisterFile register_file   = {0};
     S86_BufferIterator buffer_it = S86_BufferIteratorInit(buffer);
     S86_MnemonicOp seg_reg       = {0};
     bool lock_prefix             = false;
+
+    typedef struct MnemonicOpToRegisterFileMap {
+        S86_MnemonicOp mnemonic_op;
+        uint16_t       mask;
+        uint16_t       r_shift;
+        uint16_t       *reg;
+    } MnemonicOpToRegisterFileMap;
+
+    MnemonicOpToRegisterFileMap mnemonic_op_to_register_file_map[] = {
+        {.mnemonic_op = S86_MnemonicOp_AX, .reg = &register_file.ax, .mask = 0xFFFF, .r_shift = 0},
+        {.mnemonic_op = S86_MnemonicOp_AL, .reg = &register_file.ax, .mask = 0x00FF, .r_shift = 0},
+        {.mnemonic_op = S86_MnemonicOp_AH, .reg = &register_file.ax, .mask = 0xFF00, .r_shift = 8},
+
+        {.mnemonic_op = S86_MnemonicOp_CX, .reg = &register_file.cx, .mask = 0xFFFF, .r_shift = 0},
+        {.mnemonic_op = S86_MnemonicOp_CL, .reg = &register_file.cx, .mask = 0x00FF, .r_shift = 0},
+        {.mnemonic_op = S86_MnemonicOp_CH, .reg = &register_file.cx, .mask = 0xFF00, .r_shift = 8},
+
+        {.mnemonic_op = S86_MnemonicOp_DX, .reg = &register_file.dx, .mask = 0xFFFF, .r_shift = 0},
+        {.mnemonic_op = S86_MnemonicOp_DL, .reg = &register_file.dx, .mask = 0x00FF, .r_shift = 0},
+        {.mnemonic_op = S86_MnemonicOp_DH, .reg = &register_file.dx, .mask = 0xFF00, .r_shift = 8},
+
+        {.mnemonic_op = S86_MnemonicOp_BX, .reg = &register_file.bx, .mask = 0xFFFF, .r_shift = 0},
+        {.mnemonic_op = S86_MnemonicOp_BL, .reg = &register_file.bx, .mask = 0x00FF, .r_shift = 0},
+        {.mnemonic_op = S86_MnemonicOp_BH, .reg = &register_file.bx, .mask = 0xFF00, .r_shift = 8},
+
+        {.mnemonic_op = S86_MnemonicOp_SP, .reg = &register_file.sp, .mask = 0xFFFF, .r_shift = 0},
+        {.mnemonic_op = S86_MnemonicOp_BP, .reg = &register_file.bp, .mask = 0xFFFF, .r_shift = 0},
+        {.mnemonic_op = S86_MnemonicOp_SI, .reg = &register_file.si, .mask = 0xFFFF, .r_shift = 0},
+        {.mnemonic_op = S86_MnemonicOp_DI, .reg = &register_file.di, .mask = 0xFFFF, .r_shift = 0},
+    };
+
     while (S86_BufferIteratorHasMoreBytes(buffer_it)) {
         S86_Opcode opcode = S86_DecodeOpcode(&buffer_it,
                                              DECODE_TABLE,
@@ -1088,5 +1155,38 @@ int main(int argc, char **argv)
                                              &lock_prefix,
                                              &seg_reg);
         S86_PrintOpcode(opcode);
+        if (opcode.mnemonic == S86_Mnemonic_LOCK || opcode.mnemonic == S86_Mnemonic_SEGMENT)
+            continue;
+
+        if (exec_mode && opcode.mnemonic == S86_Mnemonic_MOV) {
+            MnemonicOpToRegisterFileMap const *dest_map = NULL;
+            for (size_t index = 0; !dest_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
+                MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
+                if (item->mnemonic_op == opcode.dest)
+                    dest_map = item;
+            }
+
+            if (dest_map) {
+                uint16_t *dest = dest_map->reg;
+                if (opcode.src == S86_MnemonicOp_Immediate) {
+                    S86_Str8 mnemonic_op = S86_MnemonicOpStr8(dest_map->mnemonic_op);
+                    S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(mnemonic_op), *dest, opcode.immediate);
+                    *dest = (uint16_t)opcode.immediate;
+                }
+            }
+        }
+        S86_Print(S86_STR8("\n"));
+    }
+
+    if (exec_mode) {
+        S86_PrintLn(S86_STR8("\nFinal registers:"));
+        S86_PrintLnFmt("      ax: 0x%04x (%u)", register_file.ax, register_file.ax);
+        S86_PrintLnFmt("      bx: 0x%04x (%u)", register_file.bx, register_file.bx);
+        S86_PrintLnFmt("      cx: 0x%04x (%u)", register_file.cx, register_file.cx);
+        S86_PrintLnFmt("      dx: 0x%04x (%u)", register_file.dx, register_file.dx);
+        S86_PrintLnFmt("      sp: 0x%04x (%u)", register_file.sp, register_file.sp);
+        S86_PrintLnFmt("      bp: 0x%04x (%u)", register_file.bp, register_file.bp);
+        S86_PrintLnFmt("      si: 0x%04x (%u)", register_file.si, register_file.si); S86_PrintLnFmt("      di: 0x%04x (%u)", register_file.di, register_file.di);
+        S86_Print(S86_STR8("\n"));
     }
 }
