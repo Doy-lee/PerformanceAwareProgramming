@@ -1172,6 +1172,18 @@ int main(int argc, char **argv)
                     S86_Str8 mnemonic_op = S86_MnemonicOpStr8(dest_map->mnemonic_op);
                     S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(mnemonic_op), *dest, opcode.immediate);
                     *dest = (uint16_t)opcode.immediate;
+                } else if (opcode.src >= S86_MnemonicOp_AX && opcode.src <= S86_MnemonicOp_DI) {
+                    MnemonicOpToRegisterFileMap const *src_map = NULL;
+                    for (size_t index = 0; !src_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
+                        MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
+                        if (item->mnemonic_op == opcode.src)
+                            src_map = item;
+                    }
+
+                    S86_Str8 dest_op = S86_MnemonicOpStr8(dest_map->mnemonic_op);
+                    uint16_t *src    = src_map->reg;
+                    S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(dest_op), *dest, *src);
+                    *dest = *src;
                 }
             }
         }
@@ -1186,7 +1198,8 @@ int main(int argc, char **argv)
         S86_PrintLnFmt("      dx: 0x%04x (%u)", register_file.dx, register_file.dx);
         S86_PrintLnFmt("      sp: 0x%04x (%u)", register_file.sp, register_file.sp);
         S86_PrintLnFmt("      bp: 0x%04x (%u)", register_file.bp, register_file.bp);
-        S86_PrintLnFmt("      si: 0x%04x (%u)", register_file.si, register_file.si); S86_PrintLnFmt("      di: 0x%04x (%u)", register_file.di, register_file.di);
+        S86_PrintLnFmt("      si: 0x%04x (%u)", register_file.si, register_file.si);
+        S86_PrintLnFmt("      di: 0x%04x (%u)", register_file.di, register_file.di);
         S86_Print(S86_STR8("\n"));
     }
 }
