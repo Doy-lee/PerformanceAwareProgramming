@@ -154,10 +154,10 @@ S86_Str8 S86_MnemonicOpStr8(S86_MnemonicOp type)
         case S86_MnemonicOp_BP:                 result = S86_STR8("bp");      break;
         case S86_MnemonicOp_SI:                 result = S86_STR8("si");      break;
         case S86_MnemonicOp_DI:                 result = S86_STR8("di");      break;
-        case S86_MnemonicOp_BX_SI:              result = S86_STR8("bx + si"); break;
-        case S86_MnemonicOp_BX_DI:              result = S86_STR8("bx + di"); break;
-        case S86_MnemonicOp_BP_SI:              result = S86_STR8("bp + si"); break;
-        case S86_MnemonicOp_BP_DI:              result = S86_STR8("bp + di"); break;
+        case S86_MnemonicOp_BX_SI:              result = S86_STR8("bx+si"); break;
+        case S86_MnemonicOp_BX_DI:              result = S86_STR8("bx+di"); break;
+        case S86_MnemonicOp_BP_SI:              result = S86_STR8("bp+si"); break;
+        case S86_MnemonicOp_BP_DI:              result = S86_STR8("bp+di"); break;
         case S86_MnemonicOp_DirectAddress:      result = S86_STR8("");        break;
         case S86_MnemonicOp_Immediate:          result = S86_STR8("");        break;
         case S86_MnemonicOp_ES:                 result = S86_STR8("es");      break;
@@ -234,7 +234,7 @@ void S86_PrintOpcodeMnemonicOp(S86_Opcode opcode, bool src)
         }
 
         if (effective_addr && opcode.displacement) {
-            S86_PrintFmt(" %c %d",
+            S86_PrintFmt("%c%d",
                          opcode.displacement >= 0 ? '+' : '-',
                          opcode.displacement >= 0 ? opcode.displacement : -opcode.displacement);
         }
@@ -303,6 +303,469 @@ void S86_DecodeEffectiveAddr(S86_Opcode *opcode, S86_BufferIterator *buffer_it, 
     }
 }
 
+S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
+                            S86_OpDecode const *decode_table,
+                            uint16_t            decode_table_size,
+                            bool               *lock_prefix,
+                            S86_MnemonicOp     *seg_reg)
+{
+    char op_code_bytes[2]         = {0};
+    size_t op_code_size           = 0;
+    op_code_bytes[op_code_size++] = S86_BufferIteratorNextByte(buffer_it);
+
+    // NOTE: Match the assembly bytes to the desired instruction
+    // =====================================================================
+    S86_OpDecodeType    op_decode_type = S86_OpDecodeType_Count;
+    S86_OpDecode const *op_decode      = NULL;
+    for (size_t op_index = 0;
+         op_decode_type == S86_OpDecodeType_Count && op_index < decode_table_size;
+         op_index++)
+    {
+        S86_OpDecode const *item = decode_table + op_index;
+
+        // NOTE: Check first instruction byte
+        // =================================================================
+        if ((op_code_bytes[0] & item->op_mask0) != item->op_bits0)
+            continue;
+
+        // NOTE Check multi-byte instruction
+        // =================================================================
+        // If the matched instruction has a bit mask for the 2nd byte, this
+        // is a multi-byte instruction. Check if the 2nd byte checks out.
+        bool op_match = true;
+        if (item->op_mask1) {
+            // TODO: This assumes the iterator is valid
+            uint8_t op_byte = S86_BufferIteratorPeekByte(buffer_it);
+            op_match = (op_byte & item->op_mask1) == item->op_bits1;
+            if (op_match) {
+                op_code_bytes[op_code_size++] = op_byte;
+                S86_BufferIteratorNextByte(buffer_it);
+            }
+        }
+
+        if (op_match) {
+            op_decode_type = op_index;
+            op_decode      = item;
+        }
+    }
+
+    // NOTE: Disassemble bytes to assembly mnemonics
+    // =================================================================
+    S86_ASSERT(op_code_size > 0 && op_code_size <= S86_ARRAY_UCOUNT(op_code_bytes));
+    S86_ASSERT(op_decode_type != S86_OpDecodeType_Count && "Unknown instruction");
+
+    S86_Opcode result     = {0};
+    result.mnemonic       = op_decode->mnemonic;
+    result.lock_prefix    = *lock_prefix;
+    result.seg_reg_prefix = *seg_reg;
+    S86_ASSERT(*seg_reg == S86_MnemonicOp_Invalid || (*seg_reg >= S86_MnemonicOp_ES && *seg_reg <= S86_MnemonicOp_DS));
+    switch (op_decode_type) {
+        // NOTE: Instruction Pattern => [0b0000'0000W | 0bAA00'0CCC | DISP-LO | DISP-HI]
+        // Where, W: Optional, AA: mod, CCC: R/M
+        case S86_OpDecodeType_JMPIndirectWithinSeg:  /*FALLTHRU*/
+        case S86_OpDecodeType_CALLIndirectWithinSeg: /*FALLTHRU*/
+        case S86_OpDecodeType_NOT:                   /*FALLTHRU*/
+        case S86_OpDecodeType_SHL_SAL:               /*FALLTHRU*/
+        case S86_OpDecodeType_SHR:                   /*FALLTHRU*/
+        case S86_OpDecodeType_SAR:                   /*FALLTHRU*/
+        case S86_OpDecodeType_ROL:                   /*FALLTHRU*/
+        case S86_OpDecodeType_ROR:                   /*FALLTHRU*/
+        case S86_OpDecodeType_RCL:                   /*FALLTHRU*/
+        case S86_OpDecodeType_RCR:                   /*FALLTHRU*/
+        case S86_OpDecodeType_MUL:                   /*FALLTHRU*/
+        case S86_OpDecodeType_IMUL:                  /*FALLTHRU*/
+        case S86_OpDecodeType_DIV:                   /*FALLTHRU*/
+        case S86_OpDecodeType_IDIV:                  /*FALLTHRU*/
+        case S86_OpDecodeType_INCRegOrMem:           /*FALLTHRU*/
+        case S86_OpDecodeType_DECRegOrMem:           /*FALLTHRU*/
+        case S86_OpDecodeType_NEG:                   /*FALLTHRU*/
+        case S86_OpDecodeType_POPRegOrMem:           /*FALLTHRU*/
+        case S86_OpDecodeType_PUSHRegOrMem: {
+            S86_ASSERT(op_code_size == 2);
+            uint8_t mod = (op_code_bytes[1] & 0b1100'0000) >> 6;
+            uint8_t rm  = (op_code_bytes[1] & 0b0000'0111) >> 0;
+            S86_ASSERT(mod < 4); S86_ASSERT(rm  < 8);
+
+            uint8_t w = 1;
+            if (op_decode_type == S86_OpDecodeType_INCRegOrMem ||
+                op_decode_type == S86_OpDecodeType_DECRegOrMem ||
+                op_decode_type == S86_OpDecodeType_NEG         ||
+                op_decode_type == S86_OpDecodeType_MUL         ||
+                op_decode_type == S86_OpDecodeType_MUL         ||
+                op_decode_type == S86_OpDecodeType_IMUL        ||
+                op_decode_type == S86_OpDecodeType_DIV         ||
+                op_decode_type == S86_OpDecodeType_IDIV        ||
+                (op_decode_type >= S86_OpDecodeType_NOT &&
+                 op_decode_type <= S86_OpDecodeType_RCR)) {
+                w = op_code_bytes[0] & 0b0000'0001;
+            }
+
+            S86_DecodeEffectiveAddr(&result, buffer_it, rm, mod, w);
+            result.wide_prefix = S86_WidePrefix_Dest;
+
+            // NOTE: Bit shifts use 'v' to indicate if shift distance should
+            // come from cl register otherwise bitshift by 1
+            if (op_decode_type >= S86_OpDecodeType_SHL_SAL && op_decode_type <= S86_OpDecodeType_RCR) {
+                uint8_t v = (op_code_bytes[0] & 0b0000'0010) >> 1;
+                if (v) {
+                    result.src = S86_MnemonicOp_CL;
+                } else {
+                    result.src       = S86_MnemonicOp_Immediate;
+                    result.immediate = 1;
+                }
+            }
+        } break;
+
+        // NOTE: Instruction Pattern => [0b0000'0000]
+        // Generally handles instructions with control bits in any position in the first byte
+        case S86_OpDecodeType_DECReg:           /*FALLTHRU*/
+        case S86_OpDecodeType_INCReg:           /*FALLTHRU*/
+        case S86_OpDecodeType_XCHGRegWithAccum: /*FALLTHRU*/
+        case S86_OpDecodeType_PUSHReg:          /*FALLTHRU*/
+        case S86_OpDecodeType_POPReg:           /*FALLTHRU*/
+        case S86_OpDecodeType_PUSHSegReg:       /*FALLTHRU*/
+        case S86_OpDecodeType_POPSegReg: {
+            S86_ASSERT(op_code_size == 1);
+            if (op_decode_type == S86_OpDecodeType_PUSHReg ||
+                op_decode_type == S86_OpDecodeType_POPReg ||
+                op_decode_type == S86_OpDecodeType_INCReg ||
+                op_decode_type == S86_OpDecodeType_DECReg ||
+                op_decode_type == S86_OpDecodeType_XCHGRegWithAccum) {
+                uint8_t reg = (op_code_bytes[0] & 0b0000'0111) >> 0;
+                result.dest  = S86_MnemonicOpFromWReg(1, reg);
+            } else {
+                S86_ASSERT(op_decode_type == S86_OpDecodeType_PUSHSegReg ||
+                           op_decode_type == S86_OpDecodeType_POPSegReg);
+                uint8_t sr = (op_code_bytes[0] & 0b0001'1000) >> 3;
+                result.dest = S86_MnemonicOpFromSR(sr);
+            }
+
+            if (op_decode_type == S86_OpDecodeType_XCHGRegWithAccum) {
+                result.src  = result.dest;
+                result.dest = S86_MnemonicOp_AX;
+            }
+        } break;
+
+        // NOTE: Instruction Pattern => [0b0000'000DW | 0bAABB'BCCC | DISP-LO | DISP-HI | DATA-LO | DATA-HI]
+        // Where, D: optional, W: optional, AA: mod, BBB: reg, CCC: r/m
+        case S86_OpDecodeType_ADDRegOrMemToOrFromReg:     /*FALLTHRU*/
+        case S86_OpDecodeType_ADCRegOrMemWithRegToEither: /*FALLTHRU*/
+        case S86_OpDecodeType_SUBRegOrMemToOrFromReg:     /*FALLTHRU*/
+        case S86_OpDecodeType_SBBRegOrMemAndRegToEither:  /*FALLTHRU*/
+        case S86_OpDecodeType_ANDRegWithMemToEither:      /*FALLTHRU*/
+        case S86_OpDecodeType_TESTRegOrMemAndReg:         /*FALLTHRU*/
+        case S86_OpDecodeType_ORRegOrMemAndRegToEither:   /*FALLTHRU*/
+        case S86_OpDecodeType_XORRegOrMemAndRegToEither:  /*FALLTHRU*/
+        case S86_OpDecodeType_LEA:                        /*FALLTHRU*/
+        case S86_OpDecodeType_LDS:                        /*FALLTHRU*/
+        case S86_OpDecodeType_LES:                        /*FALLTHRU*/
+        case S86_OpDecodeType_XCHGRegOrMemWithReg:        /*FALLTHRU*/
+        case S86_OpDecodeType_CMPRegOrMemAndReg:          /*FALLTHRU*/
+        case S86_OpDecodeType_MOVRegOrMemToOrFromReg: {
+            // NOTE: Instruction does not have opcode bits in the 2nd byte
+            S86_ASSERT(op_code_size == 1);
+            op_code_bytes[op_code_size++] = S86_BufferIteratorNextByte(buffer_it);
+
+            uint8_t w = (op_code_bytes[0] & 0b0000'0001) >> 0;
+            uint8_t d = (op_code_bytes[0] & 0b0000'0010) >> 1;
+            if (op_decode_type == S86_OpDecodeType_XCHGRegOrMemWithReg ||
+                op_decode_type == S86_OpDecodeType_LEA ||
+                op_decode_type == S86_OpDecodeType_LDS ||
+                op_decode_type == S86_OpDecodeType_LES) {
+                d = 1; // Destintation is always the register
+                if (op_decode_type == S86_OpDecodeType_XCHGRegOrMemWithReg) {
+                    if (*lock_prefix) {
+                        // NOTE: When we XCHG, NASM complains that the
+                        // instruction is not lockable, unless, the memory
+                        // operand comes first. Here we flip the direction
+                        // to ensure the memory operand is the destination.
+                        //
+                        // listing_0042_completionist_decode_disassembled.asm|319| warning: instruction is not lockable [-w+prefix-lock]
+                        d = 0;
+                    }
+                } else {
+                    w = 1; // Always 16 bit (load into register)
+                }
+            }
+
+            uint8_t mod = (op_code_bytes[1] & 0b1100'0000) >> 6;
+            uint8_t reg = (op_code_bytes[1] & 0b0011'1000) >> 3;
+            uint8_t rm  = (op_code_bytes[1] & 0b0000'0111) >> 0;
+            S86_ASSERT(d   < 2);
+            S86_ASSERT(w   < 2);
+            S86_ASSERT(mod < 4);
+            S86_ASSERT(reg < 8);
+            S86_ASSERT(rm  < 8);
+
+            result.wide = w;
+            result.src  = S86_MnemonicOpFromWReg(result.wide, reg);
+            if (mod == 0b11) { // NOTE: Register-to-register move
+                result.dest = S86_MnemonicOpFromWReg(result.wide, rm);
+            } else { // NOTE: Memory mode w/ effective address calculation
+                S86_DecodeEffectiveAddr(&result, buffer_it, rm, mod, w);
+                result.src = S86_MnemonicOpFromWReg(w, reg);
+                if (d)
+                    result.effective_addr = S86_EffectiveAddress_Src;
+                else
+                    result.effective_addr = S86_EffectiveAddress_Dest;
+            }
+
+            if (d) {
+                S86_MnemonicOp tmp = result.src;
+                result.src         = result.dest;
+                result.dest        = tmp;
+            }
+        } break;
+
+        // NOTE: Instruction Pattern => [0b0000'00SW | 0bAAA00BBB | DISP-LO | DISP-HI | DATA-LO | DATA-HI]
+        // Where S: optional, W: optional, AAA: mod, BBB: rm
+        case S86_OpDecodeType_ADDImmediateToRegOrMem:   /*FALLTHRU*/
+        case S86_OpDecodeType_ADCImmediateToRegOrMem:   /*FALLTHRU*/
+        case S86_OpDecodeType_SUBImmediateFromRegOrMem: /*FALLTHRU*/
+        case S86_OpDecodeType_SBBImmediateFromRegOrMem: /*FALLTHRU*/
+        case S86_OpDecodeType_CMPImmediateWithRegOrMem: /*FALLTHRU*/
+        case S86_OpDecodeType_ANDImmediateToRegOrMem:   /*FALLTHRU*/
+        case S86_OpDecodeType_TESTImmediateAndRegOrMem: /*FALLTHRU*/
+        case S86_OpDecodeType_ORImmediateToRegOrMem:    /*FALLTHRU*/
+        case S86_OpDecodeType_XORImmediateToRegOrMem:   /*FALLTHRU*/
+        case S86_OpDecodeType_MOVImmediateToRegOrMem: {
+            S86_ASSERT(op_code_size == 2);
+            uint8_t w   = (op_code_bytes[0] & 0b0000'0001) >> 0;
+            uint8_t s   = (op_code_bytes[0] & 0b0000'0010) >> 1;
+            uint8_t mod = (op_code_bytes[1] & 0b1100'0000) >> 6;
+            uint8_t rm  = (op_code_bytes[1] & 0b0000'0111) >> 0;
+            S86_ASSERT(w   < 2);
+            S86_ASSERT(mod < 4);
+            S86_ASSERT(rm  < 8);
+            S86_DecodeEffectiveAddr(&result, buffer_it, rm, mod, w);
+
+            // NOTE: Parse data payload
+            // =============================================================
+            uint16_t data = S86_BufferIteratorNextByte(buffer_it);
+            if (w) { // 16 bit data
+                if ((op_decode_type == S86_OpDecodeType_ADDImmediateToRegOrMem ||
+                     op_decode_type == S86_OpDecodeType_ADCImmediateToRegOrMem ||
+                     op_decode_type == S86_OpDecodeType_SUBImmediateFromRegOrMem ||
+                     op_decode_type == S86_OpDecodeType_SBBImmediateFromRegOrMem ||
+                     op_decode_type == S86_OpDecodeType_CMPImmediateWithRegOrMem ||
+                     op_decode_type == S86_OpDecodeType_ANDImmediateToRegOrMem ||
+                     op_decode_type == S86_OpDecodeType_TESTImmediateAndRegOrMem ||
+                     op_decode_type == S86_OpDecodeType_ORImmediateToRegOrMem ||
+                     op_decode_type == S86_OpDecodeType_XORImmediateToRegOrMem) && s) {
+                    // NOTE: Sign extend 8 bit, since we store into a
+                    // int32_t in opcode this is done for free for us.
+                } else {
+                    uint8_t data_hi = S86_BufferIteratorNextByte(buffer_it);
+                    data |= (uint16_t)(data_hi) << 8;
+                }
+            }
+
+            if (op_decode_type == S86_OpDecodeType_MOVImmediateToRegOrMem) {
+                S86_ASSERT(mod != 0b11); // NOTE: Op is IMM->Reg, register-to-register not permitted
+            }
+
+            result.immediate = data;
+            result.src       = S86_MnemonicOp_Immediate;
+            if (op_decode_type == S86_OpDecodeType_MOVImmediateToRegOrMem)
+                result.wide_prefix = S86_WidePrefix_Src;
+            else if (result.effective_addr_loads_mem)
+                result.wide_prefix = S86_WidePrefix_Dest;
+        } break;
+
+        // NOTE: Instruction Pattern => [0b0000'W00W | DATA-LO | DATA-HI]
+        case S86_OpDecodeType_ADDImmediateToAccum:   /*FALLTHRU*/
+        case S86_OpDecodeType_ADCImmediateToAccum:   /*FALLTHRU*/
+        case S86_OpDecodeType_SUBImmediateFromAccum: /*FALLTHRU*/
+        case S86_OpDecodeType_SBBImmediateFromAccum: /*FALLTHRU*/
+        case S86_OpDecodeType_CMPImmediateWithAccum: /*FALLTHRU*/
+        case S86_OpDecodeType_ANDImmediateToAccum:   /*FALLTHRU*/
+        case S86_OpDecodeType_TESTImmediateAndAccum: /*FALLTHRU*/
+        case S86_OpDecodeType_ORImmediateToAccum:    /*FALLTHRU*/
+        case S86_OpDecodeType_XORImmediateToAccum:   /*FALLTHRU*/
+        case S86_OpDecodeType_MOVImmediateToReg: {
+            // NOTE: Parse opcode control bits
+            // =============================================================
+            S86_ASSERT(op_code_size == 1);
+            uint8_t w   = 0;
+            if (op_decode_type == S86_OpDecodeType_ADDImmediateToAccum ||
+                op_decode_type == S86_OpDecodeType_ADCImmediateToAccum ||
+                op_decode_type == S86_OpDecodeType_SUBImmediateFromAccum ||
+                op_decode_type == S86_OpDecodeType_SBBImmediateFromAccum ||
+                op_decode_type == S86_OpDecodeType_CMPImmediateWithAccum ||
+                op_decode_type == S86_OpDecodeType_ANDImmediateToAccum ||
+                op_decode_type == S86_OpDecodeType_TESTImmediateAndAccum ||
+                op_decode_type == S86_OpDecodeType_ORImmediateToAccum ||
+                op_decode_type == S86_OpDecodeType_XORImmediateToAccum) {
+                w = (op_code_bytes[0] & 0b0000'0001) >> 0;
+            } else {
+                w = (op_code_bytes[0] & 0b0000'1000) >> 3;
+            }
+
+            // NOTE: Parse data payload
+            // =============================================================
+            uint16_t data = S86_BufferIteratorNextByte(buffer_it);
+            if (w) { // 16 bit data
+                uint8_t data_hi = S86_BufferIteratorNextByte(buffer_it);
+                data |= (uint16_t)(data_hi) << 8;
+            }
+
+            // NOTE: Disassemble
+            // =============================================================
+            result.effective_addr = S86_EffectiveAddress_Dest;
+            result.src            = S86_MnemonicOp_Immediate;
+            result.wide           = w;
+            result.src            = S86_MnemonicOp_Immediate;
+            result.immediate      = data;
+            if (op_decode_type == S86_OpDecodeType_MOVImmediateToReg) {
+                uint8_t reg = (op_code_bytes[0] & 0b0000'0111) >> 0;
+                result.dest = S86_MnemonicOpFromWReg(w, reg);
+            } else {
+                result.dest = result.wide ? S86_MnemonicOp_AX : S86_MnemonicOp_AL;
+            }
+        } break;
+
+        // NOTE: Instruction Pattern => [0b0000'000W | DATA-LO]
+        case S86_OpDecodeType_INFixedPort:    /*FALLTHRU*/
+        case S86_OpDecodeType_INVariablePort: /*FALLTHRU*/
+        case S86_OpDecodeType_OUTFixedPort:   /*FALLTHRU*/
+        case S86_OpDecodeType_OUTVariablePort: {
+            S86_ASSERT(op_code_size == 1);
+            result.wide = (op_code_bytes[0] & 0b0000'0001) >> 0;
+            result.dest = result.wide ? S86_MnemonicOp_AX : S86_MnemonicOp_AL;
+            if (op_decode_type == S86_OpDecodeType_INFixedPort ||
+                op_decode_type == S86_OpDecodeType_OUTFixedPort) {
+                result.src       = S86_MnemonicOp_Immediate;
+                result.immediate = S86_BufferIteratorNextByte(buffer_it);
+            } else {
+                result.src = S86_MnemonicOp_DX;
+            }
+
+            if (op_decode_type == S86_OpDecodeType_OUTFixedPort ||
+                op_decode_type == S86_OpDecodeType_OUTVariablePort) {
+                S86_MnemonicOp tmp = result.src;
+                result.src           = result.dest;
+                result.dest          = tmp;
+            }
+        } break;
+
+        case S86_OpDecodeType_REP: {
+            S86_ASSERT(op_code_size == 1);
+            uint8_t string_op = S86_BufferIteratorNextByte(buffer_it);
+            uint8_t w_mask    = 0b0000'0001;
+            result.rep_prefix = true;
+            result.wide       = string_op & w_mask;
+            switch (string_op & ~w_mask) {
+                case 0b1010'0100: result.dest = S86_MnemonicOp_MOVS; break;
+                case 0b1010'0110: result.dest = S86_MnemonicOp_CMPS; break;
+                case 0b1010'1110: result.dest = S86_MnemonicOp_SCAS; break;
+                case 0b1010'1100: result.dest = S86_MnemonicOp_LODS; break;
+                case 0b1010'1010: result.dest = S86_MnemonicOp_STOS; break;
+                default: S86_ASSERT(!"Unhandled REP string type"); break;
+            }
+        } break;
+
+        // NOTE: Instruction Pattern => [0b0000'0000 | DATA-LO | DATA-HI]
+        case S86_OpDecodeType_MOVAccumToMem:                /*FALLTHRU*/
+        case S86_OpDecodeType_MOVMemToAccum:                /*FALLTHRU*/
+        case S86_OpDecodeType_CALLDirectInterSeg:           /*FALLTHRU*/
+        case S86_OpDecodeType_CALLDirectWithinSeg:          /*FALLTHRU*/
+        case S86_OpDecodeType_JMPDirectInterSeg:            /*FALLTHRU*/
+        case S86_OpDecodeType_RETWithinSegAddImmediateToSP: /*FALLTHRU*/
+        case S86_OpDecodeType_INT: {
+            S86_ASSERT(op_code_size == 1);
+            uint8_t data_lo = S86_BufferIteratorNextByte(buffer_it);
+            uint16_t data   = data_lo;
+            if (op_decode_type != S86_OpDecodeType_INT) {
+                uint8_t data_hi = S86_BufferIteratorNextByte(buffer_it);
+                data = S86_CAST(uint16_t)data_hi << 8 | (S86_CAST(uint16_t)data_lo);
+            }
+
+            if (op_decode_type == S86_OpDecodeType_CALLDirectWithinSeg) {
+                result.effective_addr = S86_EffectiveAddress_Dest;
+                result.dest           = S86_MnemonicOp_BP;
+                result.displacement   = -S86_CAST(int32_t)data;
+            } else if (op_decode_type == S86_OpDecodeType_RETWithinSegAddImmediateToSP) {
+                result.dest = S86_MnemonicOp_DirectAddress;
+                result.displacement = data;
+            } else if (op_decode_type == S86_OpDecodeType_CALLDirectInterSeg ||
+                       op_decode_type == S86_OpDecodeType_JMPDirectInterSeg) {
+                uint8_t cs_lo       = S86_BufferIteratorNextByte(buffer_it);
+                uint8_t cs_hi       = S86_BufferIteratorNextByte(buffer_it);
+                uint16_t cs         = S86_CAST(uint16_t)cs_hi << 8 | (S86_CAST(uint16_t)cs_lo);
+                result.displacement = (uint32_t)cs << 16 | (uint32_t)data << 0;
+                result.dest         = S86_MnemonicOp_DirectInterSegment;
+            } else if (op_decode_type == S86_OpDecodeType_MOVAccumToMem) {
+                result.effective_addr_loads_mem = true;
+                result.effective_addr           = S86_EffectiveAddress_Dest;
+                result.dest                     = S86_MnemonicOp_DirectAddress;
+                result.displacement             = data;
+                result.src                      = S86_MnemonicOp_AX;
+            } else if (op_decode_type == S86_OpDecodeType_MOVMemToAccum) {
+                result.effective_addr_loads_mem  = true;
+                result.effective_addr            = S86_EffectiveAddress_Src;
+                result.src                       = S86_MnemonicOp_DirectAddress;
+                result.displacement              = data;
+                result.dest                      = S86_MnemonicOp_AX;
+            } else {
+                result.dest      = S86_MnemonicOp_Immediate;
+                result.immediate = data;
+            }
+        } break;
+
+        default: {
+            if (op_decode_type >= S86_OpDecodeType_JE_JZ && op_decode_type <= S86_OpDecodeType_JCXZ) {
+                S86_ASSERT(op_code_size == 1);
+                result.displacement = S86_CAST(int8_t)S86_BufferIteratorNextByte(buffer_it);
+                result.dest         = S86_MnemonicOp_Jump;
+            } else if (op_decode_type == S86_OpDecodeType_XLAT         ||
+                       op_decode_type == S86_OpDecodeType_LAHF         ||
+                       op_decode_type == S86_OpDecodeType_SAHF         ||
+                       op_decode_type == S86_OpDecodeType_PUSHF        ||
+                       op_decode_type == S86_OpDecodeType_POPF         ||
+                       op_decode_type == S86_OpDecodeType_DAA          ||
+                       op_decode_type == S86_OpDecodeType_AAA          ||
+                       op_decode_type == S86_OpDecodeType_DAS          ||
+                       op_decode_type == S86_OpDecodeType_AAS          ||
+                       op_decode_type == S86_OpDecodeType_AAM          ||
+                       op_decode_type == S86_OpDecodeType_AAD          ||
+                       op_decode_type == S86_OpDecodeType_CBW          ||
+                       op_decode_type == S86_OpDecodeType_CWD          ||
+                       op_decode_type == S86_OpDecodeType_RETWithinSeg ||
+                       op_decode_type == S86_OpDecodeType_INT3         ||
+                       op_decode_type == S86_OpDecodeType_INTO         ||
+                       op_decode_type == S86_OpDecodeType_IRET         ||
+                       op_decode_type == S86_OpDecodeType_CLC          ||
+                       op_decode_type == S86_OpDecodeType_CMC          ||
+                       op_decode_type == S86_OpDecodeType_STC          ||
+                       op_decode_type == S86_OpDecodeType_CLD          ||
+                       op_decode_type == S86_OpDecodeType_STD          ||
+                       op_decode_type == S86_OpDecodeType_CLI          ||
+                       op_decode_type == S86_OpDecodeType_STI          ||
+                       op_decode_type == S86_OpDecodeType_HLT          ||
+                       op_decode_type == S86_OpDecodeType_WAIT) {
+               // NOTE: Mnemonic only instruction
+            } else if (op_decode_type == S86_OpDecodeType_LOCK) {
+                *lock_prefix = true;
+            } else if (op_decode_type == S86_OpDecodeType_SEGMENT) {
+                // NOTE: Mnemonic does not generate any assembly
+                S86_ASSERT(op_code_size == 1);
+                uint8_t sr = (op_code_bytes[0] & 0b0001'1000) >> 3;
+                *seg_reg   = S86_MnemonicOpFromSR(sr);
+            } else {
+                S86_ASSERT(!"Unhandled instruction");
+            }
+        } break;
+    }
+
+    if (op_decode_type != S86_OpDecodeType_LOCK)
+        *lock_prefix = false;
+
+    if (op_decode_type != S86_OpDecodeType_SEGMENT)
+        *seg_reg = S86_MnemonicOp_Invalid;
+
+    return result;
+}
+
 int main(int argc, char **argv)
 {
     // NOTE: Argument handling
@@ -321,7 +784,7 @@ int main(int argc, char **argv)
 
     // NOTE: Sim8086
     // =========================================================================
-    S86_OpDecode const S86_INSTRUCTIONS[] = {
+    S86_OpDecode const DECODE_TABLE[] = {
         [S86_OpDecodeType_MOVRegOrMemToOrFromReg]       = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
                                                            .op_bits0 = 0b1000'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_Mnemonic_MOV},
         [S86_OpDecodeType_MOVImmediateToRegOrMem]       = {.op_mask0 = 0b1111'1110, .op_mask1 = 0b0011'1000,
@@ -618,462 +1081,12 @@ int main(int argc, char **argv)
     S86_BufferIterator buffer_it = S86_BufferIteratorInit(buffer);
     S86_MnemonicOp seg_reg       = {0};
     bool lock_prefix             = false;
-
     while (S86_BufferIteratorHasMoreBytes(buffer_it)) {
-        char op_code_bytes[2]         = {0};
-        size_t op_code_size           = 0;
-        op_code_bytes[op_code_size++] = S86_BufferIteratorNextByte(&buffer_it);
-
-        // NOTE: Match the assembly bytes to the desired instruction
-        // =====================================================================
-        S86_OpDecodeType    op_decode_type = S86_OpDecodeType_Count;
-        S86_OpDecode const *op_decode      = NULL;
-        for (size_t op_index = 0;
-             op_decode_type == S86_OpDecodeType_Count && op_index < S86_ARRAY_UCOUNT(S86_INSTRUCTIONS);
-             op_index++)
-        {
-            S86_OpDecode const *item = S86_INSTRUCTIONS + op_index;
-
-            // NOTE: Check first instruction byte
-            // =================================================================
-            if ((op_code_bytes[0] & item->op_mask0) != item->op_bits0)
-                continue;
-
-            // NOTE Check multi-byte instruction
-            // =================================================================
-            // If the matched instruction has a bit mask for the 2nd byte, this
-            // is a multi-byte instruction. Check if the 2nd byte checks out.
-            bool op_match = true;
-            if (item->op_mask1) {
-                // TODO: This assumes the iterator is valid
-                uint8_t op_byte = S86_BufferIteratorPeekByte(&buffer_it);
-                op_match = (op_byte & item->op_mask1) == item->op_bits1;
-                if (op_match) {
-                    op_code_bytes[op_code_size++] = op_byte;
-                    S86_BufferIteratorNextByte(&buffer_it);
-                }
-            }
-
-            if (op_match) {
-                op_decode_type = op_index;
-                op_decode      = item;
-            }
-        }
-
-        // NOTE: Disassemble bytes to assembly mnemonics
-        // =================================================================
-        S86_ASSERT(op_code_size > 0 && op_code_size <= S86_ARRAY_UCOUNT(op_code_bytes));
-        S86_ASSERT(op_decode_type != S86_OpDecodeType_Count && "Unknown instruction");
-
-        S86_Opcode opcode     = {0};
-        opcode.mnemonic       = op_decode->mnemonic;
-        opcode.lock_prefix    = lock_prefix;
-        opcode.seg_reg_prefix = seg_reg;
-        S86_ASSERT(seg_reg == S86_MnemonicOp_Invalid || (seg_reg >= S86_MnemonicOp_ES && seg_reg <= S86_MnemonicOp_DS));
-        switch (op_decode_type) {
-            // NOTE: Instruction Pattern => [0b0000'0000W | 0bAA00'0CCC | DISP-LO | DISP-HI]
-            // Where, W: Optional, AA: mod, CCC: R/M
-            case S86_OpDecodeType_JMPIndirectWithinSeg:  /*FALLTHRU*/
-            case S86_OpDecodeType_CALLIndirectWithinSeg: /*FALLTHRU*/
-            case S86_OpDecodeType_NOT:                   /*FALLTHRU*/
-            case S86_OpDecodeType_SHL_SAL:               /*FALLTHRU*/
-            case S86_OpDecodeType_SHR:                   /*FALLTHRU*/
-            case S86_OpDecodeType_SAR:                   /*FALLTHRU*/
-            case S86_OpDecodeType_ROL:                   /*FALLTHRU*/
-            case S86_OpDecodeType_ROR:                   /*FALLTHRU*/
-            case S86_OpDecodeType_RCL:                   /*FALLTHRU*/
-            case S86_OpDecodeType_RCR:                   /*FALLTHRU*/
-            case S86_OpDecodeType_MUL:                   /*FALLTHRU*/
-            case S86_OpDecodeType_IMUL:                  /*FALLTHRU*/
-            case S86_OpDecodeType_DIV:                   /*FALLTHRU*/
-            case S86_OpDecodeType_IDIV:                  /*FALLTHRU*/
-            case S86_OpDecodeType_INCRegOrMem:           /*FALLTHRU*/
-            case S86_OpDecodeType_DECRegOrMem:           /*FALLTHRU*/
-            case S86_OpDecodeType_NEG:                   /*FALLTHRU*/
-            case S86_OpDecodeType_POPRegOrMem:           /*FALLTHRU*/
-            case S86_OpDecodeType_PUSHRegOrMem: {
-                S86_ASSERT(op_code_size == 2);
-                uint8_t mod = (op_code_bytes[1] & 0b1100'0000) >> 6;
-                uint8_t rm  = (op_code_bytes[1] & 0b0000'0111) >> 0;
-                S86_ASSERT(mod < 4); S86_ASSERT(rm  < 8);
-
-                uint8_t w = 1;
-                if (op_decode_type == S86_OpDecodeType_INCRegOrMem ||
-                    op_decode_type == S86_OpDecodeType_DECRegOrMem ||
-                    op_decode_type == S86_OpDecodeType_NEG         ||
-                    op_decode_type == S86_OpDecodeType_MUL         ||
-                    op_decode_type == S86_OpDecodeType_MUL         ||
-                    op_decode_type == S86_OpDecodeType_IMUL        ||
-                    op_decode_type == S86_OpDecodeType_DIV         ||
-                    op_decode_type == S86_OpDecodeType_IDIV        ||
-                    (op_decode_type >= S86_OpDecodeType_NOT &&
-                     op_decode_type <= S86_OpDecodeType_RCR)) {
-                    w = op_code_bytes[0] & 0b0000'0001;
-                }
-
-                S86_DecodeEffectiveAddr(&opcode, &buffer_it, rm, mod, w);
-                opcode.wide_prefix = S86_WidePrefix_Dest;
-
-                // NOTE: Bit shifts use 'v' to indicate if shift distance should
-                // come from cl register otherwise bitshift by 1
-                if (op_decode_type >= S86_OpDecodeType_SHL_SAL && op_decode_type <= S86_OpDecodeType_RCR) {
-                    uint8_t v = (op_code_bytes[0] & 0b0000'0010) >> 1;
-                    if (v) {
-                        opcode.src = S86_MnemonicOp_CL;
-                    } else {
-                        opcode.src       = S86_MnemonicOp_Immediate;
-                        opcode.immediate = 1;
-                    }
-                }
-            } break;
-
-            // NOTE: Instruction Pattern => [0b0000'0000]
-            // Generally handles instructions with control bits in any position in the first byte
-            case S86_OpDecodeType_DECReg:           /*FALLTHRU*/
-            case S86_OpDecodeType_INCReg:           /*FALLTHRU*/
-            case S86_OpDecodeType_XCHGRegWithAccum: /*FALLTHRU*/
-            case S86_OpDecodeType_PUSHReg:          /*FALLTHRU*/
-            case S86_OpDecodeType_POPReg:           /*FALLTHRU*/
-            case S86_OpDecodeType_PUSHSegReg:       /*FALLTHRU*/
-            case S86_OpDecodeType_POPSegReg: {
-                S86_ASSERT(op_code_size == 1);
-                if (op_decode_type == S86_OpDecodeType_PUSHReg ||
-                    op_decode_type == S86_OpDecodeType_POPReg ||
-                    op_decode_type == S86_OpDecodeType_INCReg ||
-                    op_decode_type == S86_OpDecodeType_DECReg ||
-                    op_decode_type == S86_OpDecodeType_XCHGRegWithAccum) {
-                    uint8_t reg = (op_code_bytes[0] & 0b0000'0111) >> 0;
-                    opcode.dest  = S86_MnemonicOpFromWReg(1, reg);
-                } else {
-                    S86_ASSERT(op_decode_type == S86_OpDecodeType_PUSHSegReg ||
-                               op_decode_type == S86_OpDecodeType_POPSegReg);
-                    uint8_t sr = (op_code_bytes[0] & 0b0001'1000) >> 3;
-                    opcode.dest = S86_MnemonicOpFromSR(sr);
-                }
-
-                if (op_decode_type == S86_OpDecodeType_XCHGRegWithAccum) {
-                    opcode.src  = opcode.dest;
-                    opcode.dest = S86_MnemonicOp_AX;
-                }
-            } break;
-
-            // NOTE: Instruction Pattern => [0b0000'000DW | 0bAABB'BCCC | DISP-LO | DISP-HI | DATA-LO | DATA-HI]
-            // Where, D: optional, W: optional, AA: mod, BBB: reg, CCC: r/m
-            case S86_OpDecodeType_ADDRegOrMemToOrFromReg:     /*FALLTHRU*/
-            case S86_OpDecodeType_ADCRegOrMemWithRegToEither: /*FALLTHRU*/
-            case S86_OpDecodeType_SUBRegOrMemToOrFromReg:     /*FALLTHRU*/
-            case S86_OpDecodeType_SBBRegOrMemAndRegToEither:  /*FALLTHRU*/
-            case S86_OpDecodeType_ANDRegWithMemToEither:      /*FALLTHRU*/
-            case S86_OpDecodeType_TESTRegOrMemAndReg:         /*FALLTHRU*/
-            case S86_OpDecodeType_ORRegOrMemAndRegToEither:   /*FALLTHRU*/
-            case S86_OpDecodeType_XORRegOrMemAndRegToEither:  /*FALLTHRU*/
-            case S86_OpDecodeType_LEA:                        /*FALLTHRU*/
-            case S86_OpDecodeType_LDS:                        /*FALLTHRU*/
-            case S86_OpDecodeType_LES:                        /*FALLTHRU*/
-            case S86_OpDecodeType_XCHGRegOrMemWithReg:        /*FALLTHRU*/
-            case S86_OpDecodeType_CMPRegOrMemAndReg:          /*FALLTHRU*/
-            case S86_OpDecodeType_MOVRegOrMemToOrFromReg: {
-                // NOTE: Instruction does not have opcode bits in the 2nd byte
-                S86_ASSERT(op_code_size == 1);
-                op_code_bytes[op_code_size++] = S86_BufferIteratorNextByte(&buffer_it);
-
-                uint8_t w = (op_code_bytes[0] & 0b0000'0001) >> 0;
-                uint8_t d = (op_code_bytes[0] & 0b0000'0010) >> 1;
-                if (op_decode_type == S86_OpDecodeType_XCHGRegOrMemWithReg ||
-                    op_decode_type == S86_OpDecodeType_LEA ||
-                    op_decode_type == S86_OpDecodeType_LDS ||
-                    op_decode_type == S86_OpDecodeType_LES) {
-                    d = 1; // Destintation is always the register
-                    if (op_decode_type == S86_OpDecodeType_XCHGRegOrMemWithReg) {
-                        if (lock_prefix) {
-                            // NOTE: When we XCHG, NASM complains that the
-                            // instruction is not lockable, unless, the memory
-                            // operand comes first. Here we flip the direction
-                            // to ensure the memory operand is the destination.
-                            //
-                            // listing_0042_completionist_decode_disassembled.asm|319| warning: instruction is not lockable [-w+prefix-lock]
-                            d = 0;
-                        }
-                    } else {
-                        w = 1; // Always 16 bit (load into register)
-                    }
-                }
-
-                uint8_t mod = (op_code_bytes[1] & 0b1100'0000) >> 6;
-                uint8_t reg = (op_code_bytes[1] & 0b0011'1000) >> 3;
-                uint8_t rm  = (op_code_bytes[1] & 0b0000'0111) >> 0;
-                S86_ASSERT(d   < 2);
-                S86_ASSERT(w   < 2);
-                S86_ASSERT(mod < 4);
-                S86_ASSERT(reg < 8);
-                S86_ASSERT(rm  < 8);
-
-                opcode.wide = w;
-                opcode.src  = S86_MnemonicOpFromWReg(opcode.wide, reg);
-                if (mod == 0b11) { // NOTE: Register-to-register move
-                    opcode.dest = S86_MnemonicOpFromWReg(opcode.wide, rm);
-                } else { // NOTE: Memory mode w/ effective address calculation
-                    S86_DecodeEffectiveAddr(&opcode, &buffer_it, rm, mod, w);
-                    opcode.src = S86_MnemonicOpFromWReg(w, reg);
-                    if (d)
-                        opcode.effective_addr = S86_EffectiveAddress_Src;
-                    else
-                        opcode.effective_addr = S86_EffectiveAddress_Dest;
-                }
-
-                if (d) {
-                    S86_MnemonicOp tmp = opcode.src;
-                    opcode.src           = opcode.dest;
-                    opcode.dest          = tmp;
-                }
-            } break;
-
-            // NOTE: Instruction Pattern => [0b0000'00SW | 0bAAA00BBB | DISP-LO | DISP-HI | DATA-LO | DATA-HI]
-            // Where S: optional, W: optional, AAA: mod, BBB: rm
-            case S86_OpDecodeType_ADDImmediateToRegOrMem:   /*FALLTHRU*/
-            case S86_OpDecodeType_ADCImmediateToRegOrMem:   /*FALLTHRU*/
-            case S86_OpDecodeType_SUBImmediateFromRegOrMem: /*FALLTHRU*/
-            case S86_OpDecodeType_SBBImmediateFromRegOrMem: /*FALLTHRU*/
-            case S86_OpDecodeType_CMPImmediateWithRegOrMem: /*FALLTHRU*/
-            case S86_OpDecodeType_ANDImmediateToRegOrMem:   /*FALLTHRU*/
-            case S86_OpDecodeType_TESTImmediateAndRegOrMem: /*FALLTHRU*/
-            case S86_OpDecodeType_ORImmediateToRegOrMem:    /*FALLTHRU*/
-            case S86_OpDecodeType_XORImmediateToRegOrMem:   /*FALLTHRU*/
-            case S86_OpDecodeType_MOVImmediateToRegOrMem: {
-                S86_ASSERT(op_code_size == 2);
-                uint8_t w   = (op_code_bytes[0] & 0b0000'0001) >> 0;
-                uint8_t s   = (op_code_bytes[0] & 0b0000'0010) >> 1;
-                uint8_t mod = (op_code_bytes[1] & 0b1100'0000) >> 6;
-                uint8_t rm  = (op_code_bytes[1] & 0b0000'0111) >> 0;
-                S86_ASSERT(w   < 2);
-                S86_ASSERT(mod < 4);
-                S86_ASSERT(rm  < 8);
-                S86_DecodeEffectiveAddr(&opcode, &buffer_it, rm, mod, w);
-
-                // NOTE: Parse data payload
-                // =============================================================
-                uint16_t data = S86_BufferIteratorNextByte(&buffer_it);
-                if (w) { // 16 bit data
-                    if ((op_decode_type == S86_OpDecodeType_ADDImmediateToRegOrMem ||
-                         op_decode_type == S86_OpDecodeType_ADCImmediateToRegOrMem ||
-                         op_decode_type == S86_OpDecodeType_SUBImmediateFromRegOrMem ||
-                         op_decode_type == S86_OpDecodeType_SBBImmediateFromRegOrMem ||
-                         op_decode_type == S86_OpDecodeType_CMPImmediateWithRegOrMem ||
-                         op_decode_type == S86_OpDecodeType_ANDImmediateToRegOrMem ||
-                         op_decode_type == S86_OpDecodeType_TESTImmediateAndRegOrMem ||
-                         op_decode_type == S86_OpDecodeType_ORImmediateToRegOrMem ||
-                         op_decode_type == S86_OpDecodeType_XORImmediateToRegOrMem) && s) {
-                        // NOTE: Sign extend 8 bit, since we store into a
-                        // int32_t in opcode this is done for free for us.
-                    } else {
-                        uint8_t data_hi = S86_BufferIteratorNextByte(&buffer_it);
-                        data |= (uint16_t)(data_hi) << 8;
-                    }
-                }
-
-                if (op_decode_type == S86_OpDecodeType_MOVImmediateToRegOrMem) {
-                    S86_ASSERT(mod != 0b11); // NOTE: Op is IMM->Reg, register-to-register not permitted
-                }
-
-                opcode.immediate = data;
-                opcode.src       = S86_MnemonicOp_Immediate;
-                if (op_decode_type == S86_OpDecodeType_MOVImmediateToRegOrMem)
-                    opcode.wide_prefix = S86_WidePrefix_Src;
-                else if (opcode.effective_addr_loads_mem)
-                    opcode.wide_prefix = S86_WidePrefix_Dest;
-            } break;
-
-            // NOTE: Instruction Pattern => [0b0000'W00W | DATA-LO | DATA-HI]
-            case S86_OpDecodeType_ADDImmediateToAccum:   /*FALLTHRU*/
-            case S86_OpDecodeType_ADCImmediateToAccum:   /*FALLTHRU*/
-            case S86_OpDecodeType_SUBImmediateFromAccum: /*FALLTHRU*/
-            case S86_OpDecodeType_SBBImmediateFromAccum: /*FALLTHRU*/
-            case S86_OpDecodeType_CMPImmediateWithAccum: /*FALLTHRU*/
-            case S86_OpDecodeType_ANDImmediateToAccum:   /*FALLTHRU*/
-            case S86_OpDecodeType_TESTImmediateAndAccum: /*FALLTHRU*/
-            case S86_OpDecodeType_ORImmediateToAccum:    /*FALLTHRU*/
-            case S86_OpDecodeType_XORImmediateToAccum:   /*FALLTHRU*/
-            case S86_OpDecodeType_MOVImmediateToReg: {
-                // NOTE: Parse opcode control bits
-                // =============================================================
-                S86_ASSERT(op_code_size == 1);
-                uint8_t w   = 0;
-                if (op_decode_type == S86_OpDecodeType_ADDImmediateToAccum ||
-                    op_decode_type == S86_OpDecodeType_ADCImmediateToAccum ||
-                    op_decode_type == S86_OpDecodeType_SUBImmediateFromAccum ||
-                    op_decode_type == S86_OpDecodeType_SBBImmediateFromAccum ||
-                    op_decode_type == S86_OpDecodeType_CMPImmediateWithAccum ||
-                    op_decode_type == S86_OpDecodeType_ANDImmediateToAccum ||
-                    op_decode_type == S86_OpDecodeType_TESTImmediateAndAccum ||
-                    op_decode_type == S86_OpDecodeType_ORImmediateToAccum ||
-                    op_decode_type == S86_OpDecodeType_XORImmediateToAccum) {
-                    w = (op_code_bytes[0] & 0b0000'0001) >> 0;
-                } else {
-                    w = (op_code_bytes[0] & 0b0000'1000) >> 3;
-                }
-
-                // NOTE: Parse data payload
-                // =============================================================
-                uint16_t data = S86_BufferIteratorNextByte(&buffer_it);
-                if (w) { // 16 bit data
-                    uint8_t data_hi = S86_BufferIteratorNextByte(&buffer_it);
-                    data |= (uint16_t)(data_hi) << 8;
-                }
-
-                // NOTE: Disassemble
-                // =============================================================
-                opcode.effective_addr = S86_EffectiveAddress_Dest;
-                opcode.src            = S86_MnemonicOp_Immediate;
-                opcode.wide           = w;
-                opcode.src            = S86_MnemonicOp_Immediate;
-                opcode.immediate      = data;
-                if (op_decode_type == S86_OpDecodeType_MOVImmediateToReg) {
-                    uint8_t reg = (op_code_bytes[0] & 0b0000'0111) >> 0;
-                    opcode.dest = S86_MnemonicOpFromWReg(w, reg);
-                } else {
-                    opcode.dest = opcode.wide ? S86_MnemonicOp_AX : S86_MnemonicOp_AL;
-                }
-            } break;
-
-            // NOTE: Instruction Pattern => [0b0000'000W | DATA-LO]
-            case S86_OpDecodeType_INFixedPort:    /*FALLTHRU*/
-            case S86_OpDecodeType_INVariablePort: /*FALLTHRU*/
-            case S86_OpDecodeType_OUTFixedPort:   /*FALLTHRU*/
-            case S86_OpDecodeType_OUTVariablePort: {
-                S86_ASSERT(op_code_size == 1);
-                opcode.wide = (op_code_bytes[0] & 0b0000'0001) >> 0;
-                opcode.dest = opcode.wide ? S86_MnemonicOp_AX : S86_MnemonicOp_AL;
-                if (op_decode_type == S86_OpDecodeType_INFixedPort ||
-                    op_decode_type == S86_OpDecodeType_OUTFixedPort) {
-                    opcode.src       = S86_MnemonicOp_Immediate;
-                    opcode.immediate = S86_BufferIteratorNextByte(&buffer_it);
-                } else {
-                    opcode.src = S86_MnemonicOp_DX;
-                }
-
-                if (op_decode_type == S86_OpDecodeType_OUTFixedPort ||
-                    op_decode_type == S86_OpDecodeType_OUTVariablePort) {
-                    S86_MnemonicOp tmp = opcode.src;
-                    opcode.src           = opcode.dest;
-                    opcode.dest          = tmp;
-                }
-            } break;
-
-            case S86_OpDecodeType_REP: {
-                S86_ASSERT(op_code_size == 1);
-                uint8_t string_op = S86_BufferIteratorNextByte(&buffer_it);
-                uint8_t w_mask    = 0b0000'0001;
-                opcode.rep_prefix = true;
-                opcode.wide       = string_op & w_mask;
-                switch (string_op & ~w_mask) {
-                    case 0b1010'0100: opcode.dest = S86_MnemonicOp_MOVS; break;
-                    case 0b1010'0110: opcode.dest = S86_MnemonicOp_CMPS; break;
-                    case 0b1010'1110: opcode.dest = S86_MnemonicOp_SCAS; break;
-                    case 0b1010'1100: opcode.dest = S86_MnemonicOp_LODS; break;
-                    case 0b1010'1010: opcode.dest = S86_MnemonicOp_STOS; break;
-                    default: S86_ASSERT(!"Unhandled REP string type"); break;
-                }
-            } break;
-
-            // NOTE: Instruction Pattern => [0b0000'0000 | DATA-LO | DATA-HI]
-            case S86_OpDecodeType_MOVAccumToMem:                /*FALLTHRU*/
-            case S86_OpDecodeType_MOVMemToAccum:                /*FALLTHRU*/
-            case S86_OpDecodeType_CALLDirectInterSeg:           /*FALLTHRU*/
-            case S86_OpDecodeType_CALLDirectWithinSeg:          /*FALLTHRU*/
-            case S86_OpDecodeType_JMPDirectInterSeg:            /*FALLTHRU*/
-            case S86_OpDecodeType_RETWithinSegAddImmediateToSP: /*FALLTHRU*/
-            case S86_OpDecodeType_INT: {
-                S86_ASSERT(op_code_size == 1);
-                uint8_t data_lo = S86_BufferIteratorNextByte(&buffer_it);
-                uint16_t data   = data_lo;
-                if (op_decode_type != S86_OpDecodeType_INT) {
-                    uint8_t data_hi = S86_BufferIteratorNextByte(&buffer_it);
-                    data = S86_CAST(uint16_t)data_hi << 8 | (S86_CAST(uint16_t)data_lo);
-                }
-
-                if (op_decode_type == S86_OpDecodeType_CALLDirectWithinSeg) {
-                    opcode.effective_addr = S86_EffectiveAddress_Dest;
-                    opcode.dest           = S86_MnemonicOp_BP;
-                    opcode.displacement   = -S86_CAST(int32_t)data;
-                } else if (op_decode_type == S86_OpDecodeType_RETWithinSegAddImmediateToSP) {
-                    opcode.dest = S86_MnemonicOp_DirectAddress;
-                    opcode.displacement = data;
-                } else if (op_decode_type == S86_OpDecodeType_CALLDirectInterSeg ||
-                           op_decode_type == S86_OpDecodeType_JMPDirectInterSeg) {
-                    uint8_t cs_lo       = S86_BufferIteratorNextByte(&buffer_it);
-                    uint8_t cs_hi       = S86_BufferIteratorNextByte(&buffer_it);
-                    uint16_t cs         = S86_CAST(uint16_t)cs_hi << 8 | (S86_CAST(uint16_t)cs_lo);
-                    opcode.displacement = (uint32_t)cs << 16 | (uint32_t)data << 0;
-                    opcode.dest         = S86_MnemonicOp_DirectInterSegment;
-                } else if (op_decode_type == S86_OpDecodeType_MOVAccumToMem) {
-                    opcode.effective_addr_loads_mem = true;
-                    opcode.effective_addr           = S86_EffectiveAddress_Dest;
-                    opcode.dest                     = S86_MnemonicOp_DirectAddress;
-                    opcode.displacement             = data;
-                    opcode.src                      = S86_MnemonicOp_AX;
-                } else if (op_decode_type == S86_OpDecodeType_MOVMemToAccum) {
-                    opcode.effective_addr_loads_mem  = true;
-                    opcode.effective_addr            = S86_EffectiveAddress_Src;
-                    opcode.src                       = S86_MnemonicOp_DirectAddress;
-                    opcode.displacement              = data;
-                    opcode.dest                      = S86_MnemonicOp_AX;
-                } else {
-                    opcode.dest      = S86_MnemonicOp_Immediate;
-                    opcode.immediate = data;
-                }
-            } break;
-
-            default: {
-                if (op_decode_type >= S86_OpDecodeType_JE_JZ && op_decode_type <= S86_OpDecodeType_JCXZ) {
-                    S86_ASSERT(op_code_size == 1);
-                    opcode.displacement = S86_CAST(int8_t)S86_BufferIteratorNextByte(&buffer_it);
-                    opcode.dest         = S86_MnemonicOp_Jump;
-                } else if (op_decode_type == S86_OpDecodeType_XLAT         ||
-                           op_decode_type == S86_OpDecodeType_LAHF         ||
-                           op_decode_type == S86_OpDecodeType_SAHF         ||
-                           op_decode_type == S86_OpDecodeType_PUSHF        ||
-                           op_decode_type == S86_OpDecodeType_POPF         ||
-                           op_decode_type == S86_OpDecodeType_DAA          ||
-                           op_decode_type == S86_OpDecodeType_AAA          ||
-                           op_decode_type == S86_OpDecodeType_DAS          ||
-                           op_decode_type == S86_OpDecodeType_AAS          ||
-                           op_decode_type == S86_OpDecodeType_AAM          ||
-                           op_decode_type == S86_OpDecodeType_AAD          ||
-                           op_decode_type == S86_OpDecodeType_CBW          ||
-                           op_decode_type == S86_OpDecodeType_CWD          ||
-                           op_decode_type == S86_OpDecodeType_RETWithinSeg ||
-                           op_decode_type == S86_OpDecodeType_INT3         ||
-                           op_decode_type == S86_OpDecodeType_INTO         ||
-                           op_decode_type == S86_OpDecodeType_IRET         ||
-                           op_decode_type == S86_OpDecodeType_CLC          ||
-                           op_decode_type == S86_OpDecodeType_CMC          ||
-                           op_decode_type == S86_OpDecodeType_STC          ||
-                           op_decode_type == S86_OpDecodeType_CLD          ||
-                           op_decode_type == S86_OpDecodeType_STD          ||
-                           op_decode_type == S86_OpDecodeType_CLI          ||
-                           op_decode_type == S86_OpDecodeType_STI          ||
-                           op_decode_type == S86_OpDecodeType_HLT          ||
-                           op_decode_type == S86_OpDecodeType_WAIT) {
-                   // NOTE: Mnemonic only instruction
-                } else if (op_decode_type == S86_OpDecodeType_LOCK) {
-                    lock_prefix        = true;
-                    opcode.lock_prefix = true;
-                } else if (op_decode_type == S86_OpDecodeType_SEGMENT) {
-                    // NOTE: Mnemonic does not generate any assembly
-                    S86_ASSERT(op_code_size == 1);
-                    uint8_t sr = (op_code_bytes[0] & 0b0001'1000) >> 3;
-                    seg_reg    = S86_MnemonicOpFromSR(sr);
-                } else {
-                    S86_ASSERT(!"Unhandled instruction");
-                }
-            } break;
-        }
-
+        S86_Opcode opcode = S86_DecodeOpcode(&buffer_it,
+                                             DECODE_TABLE,
+                                             S86_ARRAY_UCOUNT(DECODE_TABLE),
+                                             &lock_prefix,
+                                             &seg_reg);
         S86_PrintOpcode(opcode);
-        if (op_decode_type != S86_OpDecodeType_LOCK)
-            lock_prefix = false;
-
-        if (op_decode_type != S86_OpDecodeType_SEGMENT)
-            seg_reg = S86_MnemonicOp_Invalid;
     }
 }
