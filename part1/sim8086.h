@@ -1,167 +1,255 @@
 // NOTE: Sim8086
 // ============================================================================
-typedef enum S86_InstructionType {
-    S86_InstructionType_MOVRegOrMemToOrFromReg,
-    S86_InstructionType_MOVImmediateToRegOrMem,
-    S86_InstructionType_MOVImmediateToReg,
-    S86_InstructionType_MOVMemToAccum,
-    S86_InstructionType_MOVAccumToMem,
-    S86_InstructionType_MOVRegOrMemToSegReg,
-    S86_InstructionType_MOVSegRegToRegOrMem,
+typedef enum S86_OpDecodeType {
+    S86_OpDecodeType_MOVRegOrMemToOrFromReg,
+    S86_OpDecodeType_MOVImmediateToRegOrMem,
+    S86_OpDecodeType_MOVImmediateToReg,
+    S86_OpDecodeType_MOVMemToAccum,
+    S86_OpDecodeType_MOVAccumToMem,
+    S86_OpDecodeType_MOVRegOrMemToSegReg,
+    S86_OpDecodeType_MOVSegRegToRegOrMem,
 
-    S86_InstructionType_PUSHRegOrMem,
-    S86_InstructionType_PUSHReg,
-    S86_InstructionType_PUSHSegReg,
+    S86_OpDecodeType_PUSHRegOrMem,
+    S86_OpDecodeType_PUSHReg,
+    S86_OpDecodeType_PUSHSegReg,
 
-    S86_InstructionType_POPRegOrMem,
-    S86_InstructionType_POPReg,
-    S86_InstructionType_POPSegReg,
+    S86_OpDecodeType_POPRegOrMem,
+    S86_OpDecodeType_POPReg,
+    S86_OpDecodeType_POPSegReg,
 
-    S86_InstructionType_XCHGRegOrMemWithReg,
-    S86_InstructionType_XCHGRegWithAccum,
+    S86_OpDecodeType_XCHGRegOrMemWithReg,
+    S86_OpDecodeType_XCHGRegWithAccum,
 
-    S86_InstructionType_INFixedPort,
-    S86_InstructionType_INVariablePort,
+    S86_OpDecodeType_INFixedPort,
+    S86_OpDecodeType_INVariablePort,
 
-    S86_InstructionType_OUTFixedPort,
-    S86_InstructionType_OUTVariablePort,
+    S86_OpDecodeType_OUTFixedPort,
+    S86_OpDecodeType_OUTVariablePort,
 
-    S86_InstructionType_XLAT,
+    S86_OpDecodeType_XLAT,
 
-    S86_InstructionType_LEA,
-    S86_InstructionType_LDS,
-    S86_InstructionType_LES,
-    S86_InstructionType_LAHF,
-    S86_InstructionType_SAHF,
-    S86_InstructionType_PUSHF,
-    S86_InstructionType_POPF,
+    S86_OpDecodeType_LEA,
+    S86_OpDecodeType_LDS,
+    S86_OpDecodeType_LES,
+    S86_OpDecodeType_LAHF,
+    S86_OpDecodeType_SAHF,
+    S86_OpDecodeType_PUSHF,
+    S86_OpDecodeType_POPF,
 
-    S86_InstructionType_ADDRegOrMemToOrFromReg,
-    S86_InstructionType_ADDImmediateToRegOrMem,
-    S86_InstructionType_ADDImmediateToAccum,
+    S86_OpDecodeType_ADDRegOrMemToOrFromReg,
+    S86_OpDecodeType_ADDImmediateToRegOrMem,
+    S86_OpDecodeType_ADDImmediateToAccum,
 
-    S86_InstructionType_ADCRegOrMemWithRegToEither,
-    S86_InstructionType_ADCImmediateToRegOrMem,
-    S86_InstructionType_ADCImmediateToAccum,
+    S86_OpDecodeType_ADCRegOrMemWithRegToEither,
+    S86_OpDecodeType_ADCImmediateToRegOrMem,
+    S86_OpDecodeType_ADCImmediateToAccum,
 
-    S86_InstructionType_INCRegOrMem,
-    S86_InstructionType_INCReg,
+    S86_OpDecodeType_INCRegOrMem,
+    S86_OpDecodeType_INCReg,
 
-    S86_InstructionType_AAA,
-    S86_InstructionType_DAA,
+    S86_OpDecodeType_AAA,
+    S86_OpDecodeType_DAA,
 
-    S86_InstructionType_SUBRegOrMemToOrFromReg,
-    S86_InstructionType_SUBImmediateFromRegOrMem,
-    S86_InstructionType_SUBImmediateFromAccum,
+    S86_OpDecodeType_SUBRegOrMemToOrFromReg,
+    S86_OpDecodeType_SUBImmediateFromRegOrMem,
+    S86_OpDecodeType_SUBImmediateFromAccum,
 
-    S86_InstructionType_SBBRegOrMemAndRegToEither,
-    S86_InstructionType_SBBImmediateFromRegOrMem,
-    S86_InstructionType_SBBImmediateFromAccum,
+    S86_OpDecodeType_SBBRegOrMemAndRegToEither,
+    S86_OpDecodeType_SBBImmediateFromRegOrMem,
+    S86_OpDecodeType_SBBImmediateFromAccum,
 
-    S86_InstructionType_DECRegOrMem,
-    S86_InstructionType_DECReg,
-    S86_InstructionType_NEG,
+    S86_OpDecodeType_DECRegOrMem,
+    S86_OpDecodeType_DECReg,
+    S86_OpDecodeType_NEG,
 
-    S86_InstructionType_CMPRegOrMemAndReg,
-    S86_InstructionType_CMPImmediateWithRegOrMem,
-    S86_InstructionType_CMPImmediateWithAccum,
+    S86_OpDecodeType_CMPRegOrMemAndReg,
+    S86_OpDecodeType_CMPImmediateWithRegOrMem,
+    S86_OpDecodeType_CMPImmediateWithAccum,
 
-    S86_InstructionType_AAS,
-    S86_InstructionType_DAS,
+    S86_OpDecodeType_AAS,
+    S86_OpDecodeType_DAS,
 
-    S86_InstructionType_MUL,
-    S86_InstructionType_IMUL,
-    S86_InstructionType_AAM,
-    S86_InstructionType_DIV,
-    S86_InstructionType_IDIV,
-    S86_InstructionType_AAD,
-    S86_InstructionType_CBW,
-    S86_InstructionType_CWD,
+    S86_OpDecodeType_MUL,
+    S86_OpDecodeType_IMUL,
+    S86_OpDecodeType_AAM,
+    S86_OpDecodeType_DIV,
+    S86_OpDecodeType_IDIV,
+    S86_OpDecodeType_AAD,
+    S86_OpDecodeType_CBW,
+    S86_OpDecodeType_CWD,
 
-    S86_InstructionType_NOT,
-    S86_InstructionType_SHL_SAL,
-    S86_InstructionType_SHR,
-    S86_InstructionType_SAR,
-    S86_InstructionType_ROL,
-    S86_InstructionType_ROR,
-    S86_InstructionType_RCL,
-    S86_InstructionType_RCR,
+    S86_OpDecodeType_NOT,
+    S86_OpDecodeType_SHL_SAL,
+    S86_OpDecodeType_SHR,
+    S86_OpDecodeType_SAR,
+    S86_OpDecodeType_ROL,
+    S86_OpDecodeType_ROR,
+    S86_OpDecodeType_RCL,
+    S86_OpDecodeType_RCR,
 
-    S86_InstructionType_ANDRegWithMemToEither,
-    S86_InstructionType_ANDImmediateToRegOrMem,
-    S86_InstructionType_ANDImmediateToAccum,
+    S86_OpDecodeType_ANDRegWithMemToEither,
+    S86_OpDecodeType_ANDImmediateToRegOrMem,
+    S86_OpDecodeType_ANDImmediateToAccum,
 
-    S86_InstructionType_TESTRegOrMemAndReg,
-    S86_InstructionType_TESTImmediateAndRegOrMem,
-    S86_InstructionType_TESTImmediateAndAccum,
+    S86_OpDecodeType_TESTRegOrMemAndReg,
+    S86_OpDecodeType_TESTImmediateAndRegOrMem,
+    S86_OpDecodeType_TESTImmediateAndAccum,
 
-    S86_InstructionType_ORRegOrMemAndRegToEither,
-    S86_InstructionType_ORImmediateToRegOrMem,
-    S86_InstructionType_ORImmediateToAccum,
+    S86_OpDecodeType_ORRegOrMemAndRegToEither,
+    S86_OpDecodeType_ORImmediateToRegOrMem,
+    S86_OpDecodeType_ORImmediateToAccum,
 
-    S86_InstructionType_XORRegOrMemAndRegToEither,
-    S86_InstructionType_XORImmediateToRegOrMem,
-    S86_InstructionType_XORImmediateToAccum,
+    S86_OpDecodeType_XORRegOrMemAndRegToEither,
+    S86_OpDecodeType_XORImmediateToRegOrMem,
+    S86_OpDecodeType_XORImmediateToAccum,
 
-    S86_InstructionType_REP,
+    S86_OpDecodeType_REP,
 
-    S86_InstructionType_CALLDirectWithinSeg,
-    S86_InstructionType_CALLIndirectWithinSeg,
-    S86_InstructionType_CALLDirectInterSeg,
-    S86_InstructionType_CALLIndirectInterSeg,
+    S86_OpDecodeType_CALLDirectWithinSeg,
+    S86_OpDecodeType_CALLIndirectWithinSeg,
+    S86_OpDecodeType_CALLDirectInterSeg,
+    S86_OpDecodeType_CALLIndirectInterSeg,
 
-    S86_InstructionType_JMPDirectWithinSeg,
-    S86_InstructionType_JMPDirectWithinSegShort,
-    S86_InstructionType_JMPIndirectWithinSeg,
-    S86_InstructionType_JMPDirectInterSeg,
-    S86_InstructionType_JMPIndirectInterSeg,
+    S86_OpDecodeType_JMPDirectWithinSeg,
+    S86_OpDecodeType_JMPDirectWithinSegShort,
+    S86_OpDecodeType_JMPIndirectWithinSeg,
+    S86_OpDecodeType_JMPDirectInterSeg,
+    S86_OpDecodeType_JMPIndirectInterSeg,
 
-    S86_InstructionType_RETWithinSeg,
-    S86_InstructionType_RETWithinSegAddImmediateToSP,
-    S86_InstructionType_RETInterSeg,
-    S86_InstructionType_RETInterSegAddImmediateToSP,
+    S86_OpDecodeType_RETWithinSeg,
+    S86_OpDecodeType_RETWithinSegAddImmediateToSP,
+    S86_OpDecodeType_RETInterSeg,
+    S86_OpDecodeType_RETInterSegAddImmediateToSP,
 
-    S86_InstructionType_JE_JZ,
-    S86_InstructionType_JL_JNGE,
-    S86_InstructionType_JLE_JNG,
-    S86_InstructionType_JB_JNAE,
-    S86_InstructionType_JBE_JNA,
-    S86_InstructionType_JP_JPE,
-    S86_InstructionType_JO,
-    S86_InstructionType_JS,
-    S86_InstructionType_JNE_JNZ,
-    S86_InstructionType_JNL_JGE,
-    S86_InstructionType_JNLE_JG,
-    S86_InstructionType_JNB_JAE,
-    S86_InstructionType_JNBE_JA,
-    S86_InstructionType_JNP_JO,
-    S86_InstructionType_JNO,
-    S86_InstructionType_JNS,
-    S86_InstructionType_LOOP,
-    S86_InstructionType_LOOPZ_LOOPE,
-    S86_InstructionType_LOOPNZ_LOOPNE,
-    S86_InstructionType_JCXZ,
+    S86_OpDecodeType_JE_JZ,
+    S86_OpDecodeType_JL_JNGE,
+    S86_OpDecodeType_JLE_JNG,
+    S86_OpDecodeType_JB_JNAE,
+    S86_OpDecodeType_JBE_JNA,
+    S86_OpDecodeType_JP_JPE,
+    S86_OpDecodeType_JO,
+    S86_OpDecodeType_JS,
+    S86_OpDecodeType_JNE_JNZ,
+    S86_OpDecodeType_JNL_JGE,
+    S86_OpDecodeType_JNLE_JG,
+    S86_OpDecodeType_JNB_JAE,
+    S86_OpDecodeType_JNBE_JA,
+    S86_OpDecodeType_JNP_JO,
+    S86_OpDecodeType_JNO,
+    S86_OpDecodeType_JNS,
+    S86_OpDecodeType_LOOP,
+    S86_OpDecodeType_LOOPZ_LOOPE,
+    S86_OpDecodeType_LOOPNZ_LOOPNE,
+    S86_OpDecodeType_JCXZ,
 
-    S86_InstructionType_INT,
-    S86_InstructionType_INT3,
-    S86_InstructionType_INTO,
-    S86_InstructionType_IRET,
+    S86_OpDecodeType_INT,
+    S86_OpDecodeType_INT3,
+    S86_OpDecodeType_INTO,
+    S86_OpDecodeType_IRET,
 
-    S86_InstructionType_CLC,
-    S86_InstructionType_CMC,
-    S86_InstructionType_STC,
-    S86_InstructionType_CLD,
-    S86_InstructionType_STD,
-    S86_InstructionType_CLI,
-    S86_InstructionType_STI,
-    S86_InstructionType_HLT,
-    S86_InstructionType_WAIT,
+    S86_OpDecodeType_CLC,
+    S86_OpDecodeType_CMC,
+    S86_OpDecodeType_STC,
+    S86_OpDecodeType_CLD,
+    S86_OpDecodeType_STD,
+    S86_OpDecodeType_CLI,
+    S86_OpDecodeType_STI,
+    S86_OpDecodeType_HLT,
+    S86_OpDecodeType_WAIT,
 
-    S86_InstructionType_LOCK,
-    S86_InstructionType_SEGMENT,
+    S86_OpDecodeType_LOCK,
+    S86_OpDecodeType_SEGMENT,
 
-    S86_InstructionType_Count,
-} S86_InstructionType;
+    S86_OpDecodeType_Count,
+} S86_OpDecodeType;
+
+typedef enum S86_Mnemonic {
+    S86_Mnemonic_MOV,
+    S86_Mnemonic_PUSH,
+    S86_Mnemonic_POP,
+    S86_Mnemonic_XCHG,
+    S86_Mnemonic_IN,
+    S86_Mnemonic_OUT,
+    S86_Mnemonic_XLAT,
+    S86_Mnemonic_LEA,
+    S86_Mnemonic_LDS,
+    S86_Mnemonic_LES,
+    S86_Mnemonic_LAHF,
+    S86_Mnemonic_SAHF,
+    S86_Mnemonic_PUSHF,
+    S86_Mnemonic_POPF,
+    S86_Mnemonic_ADD,
+    S86_Mnemonic_ADC,
+    S86_Mnemonic_INC,
+    S86_Mnemonic_AAA,
+    S86_Mnemonic_DAA,
+    S86_Mnemonic_SUB,
+    S86_Mnemonic_SBB,
+    S86_Mnemonic_DEC,
+    S86_Mnemonic_NEG,
+    S86_Mnemonic_CMP,
+    S86_Mnemonic_AAS,
+    S86_Mnemonic_DAS,
+    S86_Mnemonic_MUL,
+    S86_Mnemonic_IMUL,
+    S86_Mnemonic_AAM,
+    S86_Mnemonic_DIV,
+    S86_Mnemonic_IDIV,
+    S86_Mnemonic_AAD,
+    S86_Mnemonic_CBW,
+    S86_Mnemonic_CWD,
+    S86_Mnemonic_NOT,
+    S86_Mnemonic_SHL_SAL,
+    S86_Mnemonic_SHR,
+    S86_Mnemonic_SAR,
+    S86_Mnemonic_ROL,
+    S86_Mnemonic_ROR,
+    S86_Mnemonic_RCL,
+    S86_Mnemonic_RCR,
+    S86_Mnemonic_AND,
+    S86_Mnemonic_TEST,
+    S86_Mnemonic_OR,
+    S86_Mnemonic_XOR,
+    S86_Mnemonic_REP,
+    S86_Mnemonic_CALL,
+    S86_Mnemonic_JMP,
+    S86_Mnemonic_RET,
+    S86_Mnemonic_JE_JZ,
+    S86_Mnemonic_JL_JNGE,
+    S86_Mnemonic_JLE_JNG,
+    S86_Mnemonic_JB_JNAE,
+    S86_Mnemonic_JBE_JNA,
+    S86_Mnemonic_JP_JPE,
+    S86_Mnemonic_JO,
+    S86_Mnemonic_JS,
+    S86_Mnemonic_JNE_JNZ,
+    S86_Mnemonic_JNL_JGE,
+    S86_Mnemonic_JNLE_JG,
+    S86_Mnemonic_JNB_JAE,
+    S86_Mnemonic_JNBE_JA,
+    S86_Mnemonic_JNP_JO,
+    S86_Mnemonic_JNO,
+    S86_Mnemonic_JNS,
+    S86_Mnemonic_LOOP,
+    S86_Mnemonic_LOOPZ_LOOPE,
+    S86_Mnemonic_LOOPNZ_LOOPNE,
+    S86_Mnemonic_JCXZ,
+    S86_Mnemonic_INT,
+    S86_Mnemonic_INT3,
+    S86_Mnemonic_INTO,
+    S86_Mnemonic_IRET,
+    S86_Mnemonic_CLC,
+    S86_Mnemonic_CMC,
+    S86_Mnemonic_STC,
+    S86_Mnemonic_CLD,
+    S86_Mnemonic_STD,
+    S86_Mnemonic_CLI,
+    S86_Mnemonic_STI,
+    S86_Mnemonic_HLT,
+    S86_Mnemonic_WAIT,
+    S86_Mnemonic_LOCK,
+    S86_Mnemonic_SEGMENT,
+} S86_Mnemonic;
 
 /// Bit patterns and masks for decoding 8086 assembly. 8086 opcodes can be up
 /// to 2 bytes long and mixed with instruction specific control bits. These
@@ -170,59 +258,56 @@ typedef enum S86_InstructionType {
 ///
 /// Instructions that do not have opcode bits in the 2nd byte will have the mask
 /// set to 0.
-typedef struct S86_Instruction {
-    uint8_t op_mask0;
-    uint8_t op_bits0;
-    uint8_t op_mask1;
-    uint8_t op_bits1;
-    S86_Str8 mnemonic;
-} S86_Instruction;
+typedef struct S86_OpDecode {
+    S86_Mnemonic mnemonic;
+    uint8_t      op_mask0;
+    uint8_t      op_bits0;
+    uint8_t      op_mask1;
+    uint8_t      op_bits1;
+} S86_OpDecode;
 
-typedef enum S86_RegisterType {
-    S86_RegisterType_AL,
-    S86_RegisterType_CL,
-    S86_RegisterType_DL,
-    S86_RegisterType_BL,
-    S86_RegisterType_AH,
-    S86_RegisterType_CH,
-    S86_RegisterType_DH,
-    S86_RegisterType_BH,
+typedef enum S86_MnemonicOp {
+    S86_MnemonicOp_Invalid,
+    S86_MnemonicOp_AL,
+    S86_MnemonicOp_CL,
+    S86_MnemonicOp_DL,
+    S86_MnemonicOp_BL,
+    S86_MnemonicOp_AH,
+    S86_MnemonicOp_CH,
+    S86_MnemonicOp_DH,
+    S86_MnemonicOp_BH,
 
-    S86_RegisterType_AX,
-    S86_RegisterType_CX,
-    S86_RegisterType_DX,
-    S86_RegisterType_BX,
-    S86_RegisterType_SP,
-    S86_RegisterType_BP,
-    S86_RegisterType_SI,
-    S86_RegisterType_DI,
+    S86_MnemonicOp_AX,
+    S86_MnemonicOp_CX,
+    S86_MnemonicOp_DX,
+    S86_MnemonicOp_BX,
+    S86_MnemonicOp_SP,
+    S86_MnemonicOp_BP,
+    S86_MnemonicOp_SI,
+    S86_MnemonicOp_DI,
 
-    S86_RegisterType_BX_SI,
-    S86_RegisterType_BX_DI,
-    S86_RegisterType_BP_SI,
-    S86_RegisterType_BP_DI,
+    S86_MnemonicOp_BX_SI,
+    S86_MnemonicOp_BX_DI,
+    S86_MnemonicOp_BP_SI,
+    S86_MnemonicOp_BP_DI,
 
-    S86_RegisterType_DirectAddress,
-    S86_RegisterType_Immediate,
-} S86_RegisterType;
+    S86_MnemonicOp_DirectAddress,
+    S86_MnemonicOp_Immediate,
 
-typedef enum S86_SegmentRegisterType {
-    S86_SegmentRegisterType_Invalid,
-    S86_SegmentRegisterType_ES,
-    S86_SegmentRegisterType_CS,
-    S86_SegmentRegisterType_SS,
-    S86_SegmentRegisterType_DS,
-    S86_SegmentRegisterType_Count,
-} S86_SegmentRegisterType;
+    S86_MnemonicOp_ES,
+    S86_MnemonicOp_CS,
+    S86_MnemonicOp_SS,
+    S86_MnemonicOp_DS,
 
-typedef struct S86_EffectiveAddressStr8 {
-    S86_SegmentRegisterType seg_reg_type;
-    S86_RegisterType        reg_type;
-    int32_t                 displacement;
-    char                    data[32];
-    size_t                  size;
-    bool                    has_displacement;
-} S86_EffectiveAddressStr8;
+    S86_MnemonicOp_MOVS,
+    S86_MnemonicOp_CMPS,
+    S86_MnemonicOp_SCAS,
+    S86_MnemonicOp_LODS,
+    S86_MnemonicOp_STOS,
+
+    S86_MnemonicOp_DirectInterSegment,
+    S86_MnemonicOp_Jump,
+} S86_MnemonicOp;
 
 typedef enum S86_EffectiveAddress {
     S86_EffectiveAddress_None,
@@ -236,19 +321,25 @@ typedef enum S86_WidePrefix {
     S86_WidePrefix_Dest,
 } S86_WidePrefix;
 
+typedef struct S86_Opcode {
+    S86_Mnemonic         mnemonic;                 ///< Mnemonic type
+    S86_EffectiveAddress effective_addr;           ///< Src/dest op is an effective address calculation
+    bool                 effective_addr_loads_mem; ///< Effective address uses '[]' notation to load address memory
+    bool                 lock_prefix;              ///< Prefix the opcode with "lock" instruction
+    bool                 rep_prefix;               ///< Prefix the opcode with "rep" instruction
+    bool                 wide;                     ///< Opcode has the 'w' flag set
+    S86_WidePrefix       wide_prefix;              ///< Mnemonic src/dest op requires a 'word' or 'byte' prefix (e.g. ambiguous immediate size)
+    S86_MnemonicOp       src;                      ///< Source op for the mnemonic
+    S86_MnemonicOp       dest;                     ///< Destination op for the mnemonic
+    int32_t              displacement;             ///< Opcode has displacement/data/offset
+    int32_t              immediate;                ///< Immediate value when src/dest op is an immediate
+    S86_MnemonicOp       seg_reg_prefix;           ///< Segment register that should prefix the upcoming instruction
+} S86_Opcode;
 
-typedef struct S86_AsmOp {
-    bool                    effective_addr_wide_prefix;
-    S86_EffectiveAddress    effective_addr;
-    bool                    has_displacement;
-    bool                    lock;
-    bool                    wide;
-    S86_WidePrefix          wide_prefix;
-    S86_RegisterType        src;
-    S86_RegisterType        dest;
-    int32_t                 displacement;
-    int32_t                 immediate;
-    S86_SegmentRegisterType seg_reg;
-} S86_AsmOp;
-
-S86_EffectiveAddressStr8 S86_EffectiveAddressCalc(S86_BufferIterator *buffer_it, uint8_t rm, uint8_t mod, uint8_t w, S86_SegmentRegisterType seg_reg);
+S86_Str8       S86_MnemonicStr8         (S86_Mnemonic type);
+S86_MnemonicOp S86_MnemonicOpFromWReg   (bool w, uint8_t reg);
+S86_MnemonicOp S86_MnemonicOpFromSR     (uint8_t sr);
+S86_Str8       S86_MnemonicOpStr8       (S86_MnemonicOp type);
+void           S86_PrintOpcodeMnemonicOp(S86_Opcode opcode, bool src);
+void           S86_PrintOpcode          (S86_Opcode opcode);
+void           S86_DecodeEffectiveAddr  (S86_Opcode *opcode, S86_BufferIterator *it, uint8_t rm, uint8_t mod, uint8_t w);
