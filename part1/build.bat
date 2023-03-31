@@ -70,3 +70,10 @@ copy /Y %script_dir%\%listing_0044%.txt %build_dir% 1>NUL
 set build_dir_listing_0044=%build_dir%\%listing_0044%
 %build_dir%\sim8086.exe --exec %build_dir_listing_0044% > %build_dir_listing_0044%_disassembled.txt
 fc /N %build_dir_listing_0044%.txt %build_dir_listing_0044%_disassembled.txt || exit /b 1
+
+set listing_0045=listing_0045_challenge_register_movs
+copy /Y %script_dir%\%listing_0045% %build_dir% 1>NUL
+copy /Y %script_dir%\%listing_0045%.txt %build_dir% 1>NUL
+set build_dir_listing_0045=%build_dir%\%listing_0045%
+%build_dir%\sim8086.exe --exec %build_dir_listing_0045% > %build_dir_listing_0045%_disassembled.txt
+fc /N %build_dir_listing_0045%.txt %build_dir_listing_0045%_disassembled.txt || exit /b 1
