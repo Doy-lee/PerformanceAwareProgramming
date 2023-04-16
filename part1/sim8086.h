@@ -361,31 +361,55 @@ typedef struct S86_RegisterFileFlags {
     bool auxiliary_carry;
 } S86_RegisterFileFlags;
 
+typedef enum S86_RegisterFileRegArray {
+    S86_RegisterFileRegArray_AX,
+    S86_RegisterFileRegArray_BX,
+    S86_RegisterFileRegArray_CX,
+    S86_RegisterFileRegArray_DX,
+
+    S86_RegisterFileRegArray_SP,
+    S86_RegisterFileRegArray_BP,
+    S86_RegisterFileRegArray_SI,
+    S86_RegisterFileRegArray_DI,
+
+    S86_RegisterFileRegArray_ES,
+    S86_RegisterFileRegArray_CS,
+    S86_RegisterFileRegArray_SS,
+    S86_RegisterFileRegArray_DS,
+    S86_RegisterFileRegArray_Count,
+} S86_RegisterFileRegArray;
+
 typedef struct S86_RegisterFile {
     S86_RegisterFileFlags flags;
     uint16_t              instruction_ptr;
 
-    S86_Register16        ax;
-    S86_Register16        bx;
-    S86_Register16        cx;
-    S86_Register16        dx;
+    union {
+        struct {
+            S86_Register16 ax;
+            S86_Register16 bx;
+            S86_Register16 cx;
+            S86_Register16 dx;
 
-    S86_Register16        sp;
-    S86_Register16        bp;
-    S86_Register16        si;
-    S86_Register16        di;
+            S86_Register16 sp;
+            S86_Register16 bp;
+            S86_Register16 si;
+            S86_Register16 di;
 
-    S86_Register16        es;
-    S86_Register16        cs;
-    S86_Register16        ss;
-    S86_Register16        ds;
+            S86_Register16 es;
+            S86_Register16 cs;
+            S86_Register16 ss;
+            S86_Register16 ds;
+        } file;
+        S86_Register16 array[S86_RegisterFileRegArray_Count];
+    } reg;
 } S86_RegisterFile;
 
-bool           S86_RegisterFileFlagsEq  (S86_RegisterFileFlags lhs, S86_RegisterFileFlags rhs);
-S86_Str8       S86_MnemonicStr8         (S86_Mnemonic type);
-S86_MnemonicOp S86_MnemonicOpFromWReg   (bool w, uint8_t reg);
-S86_MnemonicOp S86_MnemonicOpFromSR     (uint8_t sr);
-S86_Str8       S86_MnemonicOpStr8       (S86_MnemonicOp type);
-void           S86_PrintOpcodeMnemonicOp(S86_Opcode opcode, bool src);
-void           S86_PrintOpcode          (S86_Opcode opcode);
-void           S86_DecodeEffectiveAddr  (S86_Opcode *opcode, S86_BufferIterator *it, uint8_t rm, uint8_t mod, uint8_t w);
+bool           S86_RegisterFileFlagsEq     (S86_RegisterFileFlags lhs, S86_RegisterFileFlags rhs);
+S86_Str8       S86_MnemonicStr8            (S86_Mnemonic type);
+S86_MnemonicOp S86_MnemonicOpFromWReg      (bool w, uint8_t reg);
+S86_MnemonicOp S86_MnemonicOpFromSR        (uint8_t sr);
+S86_Str8       S86_MnemonicOpStr8          (S86_MnemonicOp type);
+S86_Str8       S86_RegisterFileRegArrayStr8(S86_RegisterFileRegArray type);
+void           S86_PrintOpcodeMnemonicOp   (S86_Opcode opcode, bool src);
+void           S86_PrintOpcode             (S86_Opcode opcode);
+void           S86_DecodeEffectiveAddr     (S86_Opcode *opcode, S86_BufferIterator *it, uint8_t rm, uint8_t mod, uint8_t w);

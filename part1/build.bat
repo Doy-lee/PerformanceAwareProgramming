@@ -175,3 +175,18 @@ nasm %build_dir_listing_0049%_disassembled.asm
 
 fc /B %build_dir_listing_0049%     %build_dir_listing_0049%_disassembled     || exit /b 1
 fc /N %build_dir_listing_0049%.txt %build_dir_listing_0049%_disassembled.txt || exit /b 1
+
+REM ================================================================================================
+set listing_0050=listing_0050_challenge_jumps
+set build_dir_listing_0050=%build_dir%\%listing_0050%
+
+copy /Y %script_dir%\%listing_0050% %build_dir% 1>NUL
+copy /Y %script_dir%\%listing_0050%.txt %build_dir% 1>NUL
+
+%build_dir%\sim8086.exe --exec --log-instruction-ptr %build_dir_listing_0050% > %build_dir_listing_0050%_disassembled.txt
+%build_dir%\sim8086.exe                              %build_dir_listing_0050% > %build_dir_listing_0050%_disassembled.asm
+
+nasm %build_dir_listing_0050%_disassembled.asm
+
+fc /B %build_dir_listing_0050%     %build_dir_listing_0050%_disassembled     || exit /b 1
+fc /N %build_dir_listing_0050%.txt %build_dir_listing_0050%_disassembled.txt || exit /b 1
