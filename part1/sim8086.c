@@ -237,9 +237,11 @@ void S86_PrintOpcodeMnemonicOp(S86_Opcode opcode, bool src)
                      opcode.displacement >= 0 ? "" : "-",
                      opcode.displacement >= 0 ? opcode.displacement : -opcode.displacement);
     } else if (mnemonic_op == S86_MnemonicOp_Jump) {
-        S86_PrintFmt("$+2%c%d",
-                     opcode.displacement > 0 ? '+' : '-',
-                     opcode.displacement > 0 ? opcode.displacement : -opcode.displacement);
+        // NOTE: Account for the opcode itself which is 2 bytes, e.g. we can print $+2-8 or just $-6
+        int32_t displacement = opcode.displacement + 2;
+        S86_PrintFmt("$%c%d",
+                     displacement > 0 ? '+' : '-',
+                     displacement > 0 ? displacement : -displacement);
     } else if (mnemonic_op == S86_MnemonicOp_Immediate) {
         if (opcode.immediate_is_8bit) {
             S86_PrintFmt("%d", (int8_t)opcode.immediate);
@@ -329,6 +331,7 @@ void S86_DecodeEffectiveAddr(S86_Opcode *opcode, S86_BufferIterator *buffer_it, 
 S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
                             S86_OpDecode const *decode_table,
                             uint16_t            decode_table_size,
+                            uint16_t            opcode_index,
                             bool               *lock_prefix,
                             S86_MnemonicOp     *seg_reg)
 {
@@ -818,6 +821,8 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
 
     size_t buffer_end_index = buffer_it->index;
     result.byte_size        = S86_CAST(uint8_t)(buffer_end_index - buffer_start_index);
+    result.instruction_ptr  = S86_CAST(uint16_t)buffer_start_index;
+    result.index            = S86_CAST(uint16_t)opcode_index;
     return result;
 }
 
@@ -827,6 +832,31 @@ typedef struct S86_MnemonicOpToRegisterFileMap {
     S86_Register16   *reg;               ///< Pointer to the register memory this mnemonic op is using
     S86_RegisterByte  byte;              ///< The 'byte' that the mnemonic operates on (hi, lo or nil e.g. word)
 } S86_MnemonicOpToRegisterFileMap;
+
+S86_Opcode *S86_OpcodeAtInstructionPtr(S86_Opcode *opcode_array,
+                                       size_t opcode_size,
+                                       S86_Opcode *prev_opcode,
+                                       uint16_t instruction_ptr)
+{
+    S86_Opcode NIL_OPCODE = {0};
+    if (!prev_opcode)
+        prev_opcode = &NIL_OPCODE;
+
+    S86_Opcode *result = NULL;
+    if (instruction_ptr < prev_opcode->instruction_ptr) {
+        for (size_t index = prev_opcode->index - 1; !result && index < opcode_size; index--) {
+            if (opcode_array[index].instruction_ptr == instruction_ptr)
+                result = opcode_array + index;
+        }
+    } else {
+        for (size_t index = prev_opcode->index; !result && index < opcode_size; index++) {
+            if (opcode_array[index].instruction_ptr == instruction_ptr)
+                result = opcode_array + index;
+        }
+    }
+
+    return result;
+}
 
 char const CLI_ARG_EXEC[]                = "--exec";
 char const CLI_ARG_LOG_INSTRUCTION_PTR[] = "--log-instruction-ptr";
@@ -1213,14 +1243,14 @@ int main(int argc, char **argv)
     // NOTE: Count opcodes, allocate then decode in 1 swoop
     // =========================================================================
     S86_Opcode *opcode_array = NULL;
-    size_t opcode_size       = 0;
+    uint16_t opcode_size       = 0;
     {
         bool           lock_prefix = false;
         S86_MnemonicOp seg_reg     = S86_CAST(S86_MnemonicOp)0;
         for (S86_BufferIterator it = S86_BufferIteratorInit(buffer);
              S86_BufferIteratorHasMoreBytes(it);
              opcode_size++) {
-            S86_DecodeOpcode(&it, DECODE_TABLE, S86_ARRAY_UCOUNT(DECODE_TABLE), &lock_prefix, &seg_reg);
+            S86_DecodeOpcode(&it, DECODE_TABLE, S86_ARRAY_UCOUNT(DECODE_TABLE), opcode_size, &lock_prefix, &seg_reg);
         }
 
         if (opcode_size == 0)
@@ -1234,18 +1264,31 @@ int main(int argc, char **argv)
             return -1;
         }
 
-        size_t opcode_index = 0;
-        for (S86_BufferIterator it = S86_BufferIteratorInit(buffer); S86_BufferIteratorHasMoreBytes(it);) {
-            opcode_array[opcode_index++] = S86_DecodeOpcode(&it, DECODE_TABLE, S86_ARRAY_UCOUNT(DECODE_TABLE), &lock_prefix, &seg_reg);
+        uint16_t opcode_index = 0;
+        for (S86_BufferIterator it = S86_BufferIteratorInit(buffer); S86_BufferIteratorHasMoreBytes(it); opcode_index++) {
+            opcode_array[opcode_index] = S86_DecodeOpcode(&it, DECODE_TABLE, S86_ARRAY_UCOUNT(DECODE_TABLE), opcode_index, &lock_prefix, &seg_reg);
         }
     }
 
     // NOTE: Execute the assembly
     // =========================================================================
-    for (size_t opcode_index = 0; opcode_index < opcode_size; opcode_index++) {
-        S86_Opcode *opcode = opcode_array + opcode_index;
-        S86_PrintOpcode(*opcode);
+    for (S86_Opcode *prev_opcode = NULL, *opcode = NULL;
+         register_file.instruction_ptr < buffer.size;
+         prev_opcode = opcode) {
+        opcode = S86_OpcodeAtInstructionPtr(opcode_array,
+                                            opcode_size,
+                                            prev_opcode,
+                                            register_file.instruction_ptr);
+        if (!opcode) {
+            S86_PrintLnFmt("ERROR: Could not find opcode with matching instruction pointer, execution failed! [file=\"%.*s\", prev_ip=0x%x, ip=0x%x]",
+                           S86_STR8_FMT(file_path),
+                           prev_opcode->instruction_ptr,
+                           register_file.instruction_ptr);
+            return -1;
+        }
 
+        S86_PrintOpcode(*opcode);
+        register_file.instruction_ptr += opcode->byte_size;
         if (opcode->mnemonic == S86_Mnemonic_LOCK || opcode->mnemonic == S86_Mnemonic_SEGMENT)
             continue;
 
@@ -1254,6 +1297,7 @@ int main(int argc, char **argv)
             continue;
         }
 
+        // NOTE: Simulate instruction ==============================================================
         S86_RegisterFileFlags prev_flags = register_file.flags;
         switch (opcode->mnemonic) {
             case S86_Mnemonic_PUSH:          /*FALLTHRU*/
@@ -1310,7 +1354,6 @@ int main(int argc, char **argv)
             case S86_Mnemonic_JP_JPE:        /*FALLTHRU*/
             case S86_Mnemonic_JO:            /*FALLTHRU*/
             case S86_Mnemonic_JS:            /*FALLTHRU*/
-            case S86_Mnemonic_JNE_JNZ:       /*FALLTHRU*/
             case S86_Mnemonic_JNL_JGE:       /*FALLTHRU*/
             case S86_Mnemonic_JNLE_JG:       /*FALLTHRU*/
             case S86_Mnemonic_JNB_JAE:       /*FALLTHRU*/
@@ -1488,14 +1531,20 @@ int main(int argc, char **argv)
                 }
 
             } break;
+
+            case S86_Mnemonic_JNE_JNZ: {
+                if (!register_file.flags.zero)
+                    register_file.instruction_ptr += S86_CAST(int16_t)opcode->displacement;
+                S86_PrintFmt(" ; ");
+            } break;
         }
 
-        // NOTE: Print Instruction Pointer
+        // NOTE: Printing ==========================================================================
+        // NOTE: Instruction Pointer
         if (log_instruction_ptr)
-            S86_PrintFmt("ip:0x%x->0x%x ", register_file.instruction_ptr, register_file.instruction_ptr + opcode->byte_size);
-        register_file.instruction_ptr += opcode->byte_size;
+            S86_PrintFmt("ip:0x%x->0x%x ", opcode->instruction_ptr, register_file.instruction_ptr);
 
-        // NOTE: Print Flags
+        // NOTE: Flags
         if (!S86_RegisterFileFlagsEq(register_file.flags, prev_flags)) {
             S86_PrintFmt("flags:");
             if (prev_flags.carry)

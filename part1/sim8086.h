@@ -323,6 +323,8 @@ typedef enum S86_WidePrefix {
 
 typedef struct S86_Opcode {
     uint8_t              byte_size;                ///< Number of bytes used to encode this opcode
+    uint16_t             instruction_ptr;          ///< The instruction pointer value at this opcode
+    uint16_t             index;                    ///< Opcode index in the opcode array this was decoded from
     S86_Mnemonic         mnemonic;                 ///< Mnemonic type
     S86_EffectiveAddress effective_addr;           ///< Src/dest op is an effective address calculation
     bool                 effective_addr_loads_mem; ///< Effective address uses '[]' notation to load address memory
