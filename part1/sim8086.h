@@ -322,6 +322,7 @@ typedef enum S86_WidePrefix {
 } S86_WidePrefix;
 
 typedef struct S86_Opcode {
+    uint8_t              byte_size;                ///< Number of bytes used to encode this opcode
     S86_Mnemonic         mnemonic;                 ///< Mnemonic type
     S86_EffectiveAddress effective_addr;           ///< Src/dest op is an effective address calculation
     bool                 effective_addr_loads_mem; ///< Effective address uses '[]' notation to load address memory
@@ -360,21 +361,22 @@ typedef struct S86_RegisterFileFlags {
 
 typedef struct S86_RegisterFile {
     S86_RegisterFileFlags flags;
+    uint16_t              instruction_ptr;
 
-    S86_Register16 ax;
-    S86_Register16 bx;
-    S86_Register16 cx;
-    S86_Register16 dx;
+    S86_Register16        ax;
+    S86_Register16        bx;
+    S86_Register16        cx;
+    S86_Register16        dx;
 
-    S86_Register16 sp;
-    S86_Register16 bp;
-    S86_Register16 si;
-    S86_Register16 di;
+    S86_Register16        sp;
+    S86_Register16        bp;
+    S86_Register16        si;
+    S86_Register16        di;
 
-    S86_Register16 es;
-    S86_Register16 cs;
-    S86_Register16 ss;
-    S86_Register16 ds;
+    S86_Register16        es;
+    S86_Register16        cs;
+    S86_Register16        ss;
+    S86_Register16        ds;
 } S86_RegisterFile;
 
 bool           S86_RegisterFileFlagsEq  (S86_RegisterFileFlags lhs, S86_RegisterFileFlags rhs);

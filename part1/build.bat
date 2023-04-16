@@ -153,8 +153,8 @@ set build_dir_listing_0048=%build_dir%\%listing_0048%
 copy /Y %script_dir%\%listing_0048% %build_dir% 1>NUL
 copy /Y %script_dir%\%listing_0048%.txt %build_dir% 1>NUL
 
-%build_dir%\sim8086.exe --exec %build_dir_listing_0048% > %build_dir_listing_0048%_disassembled.txt
-%build_dir%\sim8086.exe        %build_dir_listing_0048% > %build_dir_listing_0048%_disassembled.asm
+%build_dir%\sim8086.exe --exec --log-instruction-ptr %build_dir_listing_0048% > %build_dir_listing_0048%_disassembled.txt
+%build_dir%\sim8086.exe                              %build_dir_listing_0048% > %build_dir_listing_0048%_disassembled.asm
 
 nasm %build_dir_listing_0048%_disassembled.asm
 

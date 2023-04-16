@@ -332,6 +332,7 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
                             bool               *lock_prefix,
                             S86_MnemonicOp     *seg_reg)
 {
+    size_t buffer_start_index     = buffer_it->index;
     char op_code_bytes[2]         = {0};
     size_t op_code_size           = 0;
     op_code_bytes[op_code_size++] = S86_BufferIteratorNextByte(buffer_it);
@@ -815,6 +816,8 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
     if (op_decode_type != S86_OpDecodeType_SEGMENT)
         *seg_reg = S86_MnemonicOp_Invalid;
 
+    size_t buffer_end_index = buffer_it->index;
+    result.byte_size        = S86_CAST(uint8_t)(buffer_end_index - buffer_start_index);
     return result;
 }
 
@@ -1207,6 +1210,8 @@ int main(int argc, char **argv)
         {.mnemonic_op = S86_MnemonicOp_DS, .mnemonic_op_reg16 = S86_MnemonicOp_DS, .reg = &register_file.ds, .byte = S86_RegisterByte_Nil},
     };
 
+    // NOTE: Count opcodes, allocate then decode in 1 swoop
+    // =========================================================================
     S86_Opcode *opcode_array = NULL;
     size_t opcode_size       = 0;
     {
@@ -1235,6 +1240,8 @@ int main(int argc, char **argv)
         }
     }
 
+    // NOTE: Execute the assembly
+    // =========================================================================
     for (size_t opcode_index = 0; opcode_index < opcode_size; opcode_index++) {
         S86_Opcode *opcode = opcode_array + opcode_index;
         S86_PrintOpcode(*opcode);
@@ -1479,9 +1486,16 @@ int main(int argc, char **argv)
                     S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(dest_reg16), prev_dest.word, dest.word);
                     *dest_map->reg = dest;
                 }
+
             } break;
         }
 
+        // NOTE: Print Instruction Pointer
+        if (log_instruction_ptr)
+            S86_PrintFmt("ip:0x%x->0x%x ", register_file.instruction_ptr, register_file.instruction_ptr + opcode->byte_size);
+        register_file.instruction_ptr += opcode->byte_size;
+
+        // NOTE: Print Flags
         if (!S86_RegisterFileFlagsEq(register_file.flags, prev_flags)) {
             S86_PrintFmt("flags:");
             if (prev_flags.carry)
@@ -1512,6 +1526,7 @@ int main(int argc, char **argv)
                 S86_PrintFmt("O");
             S86_PrintFmt(" ");
         }
+
         S86_Print(S86_STR8("\n"));
     }
 
@@ -1539,6 +1554,9 @@ int main(int argc, char **argv)
             S86_PrintLnFmt("      ss: 0x%04x (%u)", register_file.ss, register_file.ss);
         if (register_file.ds.word)
             S86_PrintLnFmt("      ds: 0x%04x (%u)", register_file.ds, register_file.ds);
+
+        if (log_instruction_ptr)
+            S86_PrintLnFmt("      ip: 0x%04x (%u)", register_file.instruction_ptr, register_file.instruction_ptr);
 
         S86_RegisterFileFlags nil_flags = {0};
         if (!S86_RegisterFileFlagsEq(register_file.flags, nil_flags)) {
