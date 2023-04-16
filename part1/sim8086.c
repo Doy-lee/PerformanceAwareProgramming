@@ -815,10 +815,10 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
 }
 
 typedef struct S86_MnemonicOpToRegisterFileMap {
-    S86_MnemonicOp mnemonic_op;       ///< Register/op that the mnemonic is using
-    S86_MnemonicOp mnemonic_op_reg16; ///< 16 bit register for the mnemonic op
-    S86_Register16    *reg;           ///< Pointer to the register memory this mnemonic op is using
-    S86_RegisterByte byte;            ///< The 'byte' that the mnemonic operates on (hi, lo or nil e.g. word)
+    S86_MnemonicOp    mnemonic_op;       ///< Register/op that the mnemonic is using
+    S86_MnemonicOp    mnemonic_op_reg16; ///< 16 bit register for the mnemonic op
+    S86_Register16   *reg;               ///< Pointer to the register memory this mnemonic op is using
+    S86_RegisterByte  byte;              ///< The 'byte' that the mnemonic operates on (hi, lo or nil e.g. word)
 } S86_MnemonicOpToRegisterFileMap;
 
 #define PRINT_USAGE S86_PrintLn(S86_STR8("usage: sim8086.exe [--exec] <binary asm file>"))
@@ -1329,105 +1329,28 @@ int main(int argc, char **argv)
                 S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(dest_reg16), prev_dest, dest_map->reg->word);
             } break;
 
-            case S86_Mnemonic_ADD: {
-                S86_MnemonicOpToRegisterFileMap const *dest_map = NULL;
-                for (size_t index = 0; !dest_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
-                    S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
-                    if (item->mnemonic_op == opcode.dest)
-                        dest_map = item;
-                }
-                S86_ASSERT(dest_map);
-
-                uint16_t prev_dest = dest_map->reg->word;
-                bool byte_op       = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
-                if (opcode.src == S86_MnemonicOp_Immediate) {
-                    if (byte_op) {
-                        S86_ASSERT(opcode.immediate < S86_CAST(uint8_t)-1);
-                        dest_map->reg->bytes[dest_map->byte] += S86_CAST(uint8_t)opcode.immediate;
-                    } else {
-                        S86_ASSERT(opcode.immediate < S86_CAST(uint16_t)-1);
-                        dest_map->reg->word += S86_CAST(uint16_t)opcode.immediate;
-                    }
-                } else {
-                    S86_MnemonicOpToRegisterFileMap const *src_map = NULL;
-                    for (size_t index = 0; !src_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
-                        S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
-                        if (item->mnemonic_op == opcode.src)
-                            src_map = item;
-                    }
-
-                    if (byte_op)
-                        dest_map->reg->bytes[dest_map->byte] += src_map->reg->bytes[src_map->byte];
-                    else
-                        dest_map->reg->word += src_map->reg->word;
-                }
-
-                S86_Str8 dest_reg16 = S86_MnemonicOpStr8(dest_map->mnemonic_op_reg16);
-
-                register_file.sign_flag = dest_map->reg->word & (byte_op ? 0b0000'0000'1000'0000 : 0b1000'0000'0000'0000);
-                S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(dest_reg16), prev_dest, dest_map->reg->word);
-            } break;
-
-            case S86_Mnemonic_SUB: {
-                S86_MnemonicOpToRegisterFileMap const *dest_map = NULL;
-                for (size_t index = 0; !dest_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
-                    S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
-                    if (item->mnemonic_op == opcode.dest)
-                        dest_map = item;
-                }
-                S86_ASSERT(dest_map);
-
-                uint16_t prev_dest = dest_map->reg->word;
-                bool byte_op       = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
-                if (opcode.src == S86_MnemonicOp_Immediate) {
-                    if (byte_op) {
-                        S86_ASSERT(opcode.immediate < S86_CAST(uint8_t)-1);
-                        dest_map->reg->bytes[dest_map->byte] -= S86_CAST(uint8_t)opcode.immediate;
-                    } else {
-                        S86_ASSERT(opcode.immediate < S86_CAST(uint16_t)-1);
-                        dest_map->reg->word -= S86_CAST(uint16_t)opcode.immediate;
-                    }
-                } else {
-                    S86_MnemonicOpToRegisterFileMap const *src_map = NULL;
-                    for (size_t index = 0; !src_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
-                        S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
-                        if (item->mnemonic_op == opcode.src)
-                            src_map = item;
-                    }
-
-                    if (byte_op)
-                        dest_map->reg->bytes[dest_map->byte] -= src_map->reg->bytes[src_map->byte];
-                    else
-                        dest_map->reg->word -= src_map->reg->word;
-                }
-
-                S86_Str8 dest_reg16 = S86_MnemonicOpStr8(dest_map->mnemonic_op_reg16);
-
-                register_file.zero_flag = byte_op ? dest_map->reg->bytes[dest_map->byte] == 0 : dest_map->reg->word == 0;
-                register_file.sign_flag = dest_map->reg->word & (byte_op ? 0b0000'0000'1000'0000 : 0b1000'0000'0000'0000);
-                S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(dest_reg16), prev_dest, dest_map->reg->word);
-            } break;
-
+            case S86_Mnemonic_ADD: /*FALLTHRU*/
+            case S86_Mnemonic_SUB: /*FALLTHRU*/
             case S86_Mnemonic_CMP: {
-                S86_MnemonicOpToRegisterFileMap const *dest_map = NULL;
+                S86_MnemonicOpToRegisterFileMap *dest_map = NULL;
                 for (size_t index = 0; !dest_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
-                    S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
+                    S86_MnemonicOpToRegisterFileMap *item = mnemonic_op_to_register_file_map + index;
                     if (item->mnemonic_op == opcode.dest)
                         dest_map = item;
                 }
                 S86_ASSERT(dest_map);
 
-                S86_Register16 dest_copy = *dest_map->reg;
-                S86_Register16 *dest     = &dest_copy;
-
-                bool byte_op = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
+                uint16_t sign        = opcode.mnemonic == S86_Mnemonic_ADD ? 1 : -1;
+                S86_Register16 dest  = *dest_map->reg;
+                uint16_t prev_dest16 = dest.word;
+                bool byte_op         = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
                 if (opcode.src == S86_MnemonicOp_Immediate) {
                     if (byte_op) {
                         S86_ASSERT(opcode.immediate < S86_CAST(uint8_t)-1);
-                        dest->bytes[dest_map->byte] -= S86_CAST(uint8_t)opcode.immediate;
+                        dest.bytes[dest_map->byte] += S86_CAST(uint8_t)(opcode.immediate * sign);
                     } else {
                         S86_ASSERT(opcode.immediate < S86_CAST(uint16_t)-1);
-                        dest->word -= S86_CAST(uint16_t)opcode.immediate;
+                        dest.word += S86_CAST(uint16_t)(opcode.immediate * sign);
                     }
                 } else {
                     S86_MnemonicOpToRegisterFileMap const *src_map = NULL;
@@ -1438,13 +1361,21 @@ int main(int argc, char **argv)
                     }
 
                     if (byte_op)
-                        dest->bytes[dest_map->byte] -= src_map->reg->bytes[src_map->byte];
+                        dest.bytes[dest_map->byte] += S86_CAST(uint8_t)(src_map->reg->bytes[src_map->byte] * sign);
                     else
-                        dest->word -= src_map->reg->word;
+                        dest.word += S86_CAST(uint16_t)(src_map->reg->word * sign);
                 }
 
+                S86_Str8 dest_reg16     = S86_MnemonicOpStr8(dest_map->mnemonic_op_reg16);
                 register_file.sign_flag = dest_map->reg->word & (byte_op ? 0b0000'0000'1000'0000 : 0b1000'0000'0000'0000);
-                S86_PrintFmt(" ; ");
+                if (opcode.mnemonic == S86_Mnemonic_CMP) {
+                    S86_PrintFmt(" ; ");
+                } else {
+                    if (opcode.mnemonic == S86_Mnemonic_SUB)
+                        register_file.zero_flag = byte_op ? dest.bytes[dest_map->byte] == 0 : dest.word == 0;
+                    S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(dest_reg16), prev_dest16, dest.word);
+                    *dest_map->reg = dest;
+                }
             } break;
         }
 
