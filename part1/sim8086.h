@@ -337,6 +337,47 @@ typedef struct S86_Opcode {
     S86_MnemonicOp       seg_reg_prefix;           ///< Segment register that should prefix the upcoming instruction
 } S86_Opcode;
 
+typedef enum S86_RegisterByte {
+    S86_RegisterByte_Lo,
+    S86_RegisterByte_Hi,
+    S86_RegisterByte_Count,
+    S86_RegisterByte_Nil,
+} S86_RegisterByte;
+
+typedef union S86_Register16 {
+    uint16_t word;
+    uint8_t bytes[S86_RegisterByte_Count];
+} S86_Register16;
+
+typedef struct S86_RegisterFileFlags {
+    bool carry;
+    bool zero;
+    bool sign;
+    bool overflow;
+    bool parity;
+    bool auxiliary_carry;
+} S86_RegisterFileFlags;
+
+typedef struct S86_RegisterFile {
+    S86_RegisterFileFlags flags;
+
+    S86_Register16 ax;
+    S86_Register16 bx;
+    S86_Register16 cx;
+    S86_Register16 dx;
+
+    S86_Register16 sp;
+    S86_Register16 bp;
+    S86_Register16 si;
+    S86_Register16 di;
+
+    S86_Register16 es;
+    S86_Register16 cs;
+    S86_Register16 ss;
+    S86_Register16 ds;
+} S86_RegisterFile;
+
+bool           S86_RegisterFileFlagsEq  (S86_RegisterFileFlags lhs, S86_RegisterFileFlags rhs);
 S86_Str8       S86_MnemonicStr8         (S86_Mnemonic type);
 S86_MnemonicOp S86_MnemonicOpFromWReg   (bool w, uint8_t reg);
 S86_MnemonicOp S86_MnemonicOpFromSR     (uint8_t sr);
