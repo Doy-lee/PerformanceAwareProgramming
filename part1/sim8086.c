@@ -3,22 +3,40 @@
 
 #include "sim8086_stdlib.c"
 
-typedef struct RegisterFile {
-    uint16_t ax;
-    uint16_t cx;
-    uint16_t dx;
-    uint16_t bx;
+typedef enum S86_RegisterByte {
+    S86_RegisterByte_Lo,
+    S86_RegisterByte_Hi,
+    S86_RegisterByte_Count,
+    S86_RegisterByte_Nil,
+} S86_RegisterByte;
 
-    uint16_t sp;
-    uint16_t bp;
-    uint16_t si;
-    uint16_t di;
+typedef union S86_Register16 {
+    uint16_t word;
+    struct { uint8_t lo; uint8_t hi; } byte;
+    uint8_t bytes[S86_RegisterByte_Count];
+} S86_Register16;
 
-    uint16_t es;
-    uint16_t cs;
-    uint16_t ss;
-    uint16_t ds;
-} RegisterFile;
+typedef struct S86_RegisterFile {
+    bool zero_flag;
+    bool sign_flag;
+    bool parity_flag;
+    bool overflow_flag;
+
+    S86_Register16 ax;
+    S86_Register16 bx;
+    S86_Register16 cx;
+    S86_Register16 dx;
+
+    S86_Register16 sp;
+    S86_Register16 bp;
+    S86_Register16 si;
+    S86_Register16 di;
+
+    S86_Register16 es;
+    S86_Register16 cs;
+    S86_Register16 ss;
+    S86_Register16 ds;
+} S86_RegisterFile;
 
 S86_Str8 S86_MnemonicStr8(S86_Mnemonic type)
 {
@@ -298,7 +316,7 @@ void S86_DecodeEffectiveAddr(S86_Opcode *opcode, S86_BufferIterator *buffer_it, 
         opcode->dest = S86_MnemonicOpFromWReg(w, rm);
     } else {
         // NOTE: Effective address calculation w/ displacement
-        // =========================================================================
+        // =====================================================================
         opcode->effective_addr_loads_mem = true;
         if (direct_address) {
             opcode->dest = S86_MnemonicOp_DirectAddress;
@@ -799,11 +817,9 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
 typedef struct S86_MnemonicOpToRegisterFileMap {
     S86_MnemonicOp mnemonic_op;       ///< Register/op that the mnemonic is using
     S86_MnemonicOp mnemonic_op_reg16; ///< 16 bit register for the mnemonic op
-    uint16_t       mask;              ///< Mask for the bits that the mnemonic op is using (hi/lo/full bit coverage)
-    uint16_t       r_shift;           ///< Shift amount for isolating the masked value
-    uint16_t       *reg;              ///< Pointer to the register memory this mnemonic op is using
+    S86_Register16    *reg;           ///< Pointer to the register memory this mnemonic op is using
+    S86_RegisterByte byte;            ///< The 'byte' that the mnemonic operates on (hi, lo or nil e.g. word)
 } S86_MnemonicOpToRegisterFileMap;
-
 
 #define PRINT_USAGE S86_PrintLn(S86_STR8("usage: sim8086.exe [--exec] <binary asm file>"))
 int main(int argc, char **argv)
@@ -1143,37 +1159,37 @@ int main(int argc, char **argv)
     else
         S86_PrintLn(S86_STR8("bits 16"));
 
-    RegisterFile register_file   = {0};
-    S86_BufferIterator buffer_it = S86_BufferIteratorInit(buffer);
-    S86_MnemonicOp seg_reg       = {0};
-    bool lock_prefix             = false;
+    S86_RegisterFile register_file = {0};
+    S86_BufferIterator buffer_it   = S86_BufferIteratorInit(buffer);
+    S86_MnemonicOp seg_reg         = {0};
+    bool lock_prefix               = false;
 
     S86_MnemonicOpToRegisterFileMap mnemonic_op_to_register_file_map[] = {
-        {.mnemonic_op = S86_MnemonicOp_AX, .mnemonic_op_reg16 = S86_MnemonicOp_AX, .reg = &register_file.ax, .mask = 0xFFFF, .r_shift = 0},
-        {.mnemonic_op = S86_MnemonicOp_AL, .mnemonic_op_reg16 = S86_MnemonicOp_AX, .reg = &register_file.ax, .mask = 0x00FF, .r_shift = 0},
-        {.mnemonic_op = S86_MnemonicOp_AH, .mnemonic_op_reg16 = S86_MnemonicOp_AX, .reg = &register_file.ax, .mask = 0xFF00, .r_shift = 8},
+        {.mnemonic_op = S86_MnemonicOp_AX, .mnemonic_op_reg16 = S86_MnemonicOp_AX, .reg = &register_file.ax, .byte = S86_RegisterByte_Nil},
+        {.mnemonic_op = S86_MnemonicOp_AL, .mnemonic_op_reg16 = S86_MnemonicOp_AX, .reg = &register_file.ax, .byte = S86_RegisterByte_Lo},
+        {.mnemonic_op = S86_MnemonicOp_AH, .mnemonic_op_reg16 = S86_MnemonicOp_AX, .reg = &register_file.ax, .byte = S86_RegisterByte_Hi},
 
-        {.mnemonic_op = S86_MnemonicOp_CX, .mnemonic_op_reg16 = S86_MnemonicOp_CX, .reg = &register_file.cx, .mask = 0xFFFF, .r_shift = 0},
-        {.mnemonic_op = S86_MnemonicOp_CL, .mnemonic_op_reg16 = S86_MnemonicOp_CX, .reg = &register_file.cx, .mask = 0x00FF, .r_shift = 0},
-        {.mnemonic_op = S86_MnemonicOp_CH, .mnemonic_op_reg16 = S86_MnemonicOp_CX, .reg = &register_file.cx, .mask = 0xFF00, .r_shift = 8},
+        {.mnemonic_op = S86_MnemonicOp_CX, .mnemonic_op_reg16 = S86_MnemonicOp_CX, .reg = &register_file.cx, .byte = S86_RegisterByte_Nil},
+        {.mnemonic_op = S86_MnemonicOp_CL, .mnemonic_op_reg16 = S86_MnemonicOp_CX, .reg = &register_file.cx, .byte = S86_RegisterByte_Lo},
+        {.mnemonic_op = S86_MnemonicOp_CH, .mnemonic_op_reg16 = S86_MnemonicOp_CX, .reg = &register_file.cx, .byte = S86_RegisterByte_Lo},
 
-        {.mnemonic_op = S86_MnemonicOp_DX, .mnemonic_op_reg16 = S86_MnemonicOp_DX, .reg = &register_file.dx, .mask = 0xFFFF, .r_shift = 0},
-        {.mnemonic_op = S86_MnemonicOp_DL, .mnemonic_op_reg16 = S86_MnemonicOp_DX, .reg = &register_file.dx, .mask = 0x00FF, .r_shift = 0},
-        {.mnemonic_op = S86_MnemonicOp_DH, .mnemonic_op_reg16 = S86_MnemonicOp_DX, .reg = &register_file.dx, .mask = 0xFF00, .r_shift = 8},
+        {.mnemonic_op = S86_MnemonicOp_DX, .mnemonic_op_reg16 = S86_MnemonicOp_DX, .reg = &register_file.dx, .byte = S86_RegisterByte_Nil},
+        {.mnemonic_op = S86_MnemonicOp_DL, .mnemonic_op_reg16 = S86_MnemonicOp_DX, .reg = &register_file.dx, .byte = S86_RegisterByte_Lo},
+        {.mnemonic_op = S86_MnemonicOp_DH, .mnemonic_op_reg16 = S86_MnemonicOp_DX, .reg = &register_file.dx, .byte = S86_RegisterByte_Hi},
 
-        {.mnemonic_op = S86_MnemonicOp_BX, .mnemonic_op_reg16 = S86_MnemonicOp_BX, .reg = &register_file.bx, .mask = 0xFFFF, .r_shift = 0},
-        {.mnemonic_op = S86_MnemonicOp_BL, .mnemonic_op_reg16 = S86_MnemonicOp_BX, .reg = &register_file.bx, .mask = 0x00FF, .r_shift = 0},
-        {.mnemonic_op = S86_MnemonicOp_BH, .mnemonic_op_reg16 = S86_MnemonicOp_BX, .reg = &register_file.bx, .mask = 0xFF00, .r_shift = 8},
+        {.mnemonic_op = S86_MnemonicOp_BX, .mnemonic_op_reg16 = S86_MnemonicOp_BX, .reg = &register_file.bx, .byte = S86_RegisterByte_Nil},
+        {.mnemonic_op = S86_MnemonicOp_BL, .mnemonic_op_reg16 = S86_MnemonicOp_BX, .reg = &register_file.bx, .byte = S86_RegisterByte_Lo},
+        {.mnemonic_op = S86_MnemonicOp_BH, .mnemonic_op_reg16 = S86_MnemonicOp_BX, .reg = &register_file.bx, .byte = S86_RegisterByte_Hi},
 
-        {.mnemonic_op = S86_MnemonicOp_SP, .mnemonic_op_reg16 = S86_MnemonicOp_SP, .reg = &register_file.sp, .mask = 0xFFFF, .r_shift = 0},
-        {.mnemonic_op = S86_MnemonicOp_BP, .mnemonic_op_reg16 = S86_MnemonicOp_BP, .reg = &register_file.bp, .mask = 0xFFFF, .r_shift = 0},
-        {.mnemonic_op = S86_MnemonicOp_SI, .mnemonic_op_reg16 = S86_MnemonicOp_SI, .reg = &register_file.si, .mask = 0xFFFF, .r_shift = 0},
-        {.mnemonic_op = S86_MnemonicOp_DI, .mnemonic_op_reg16 = S86_MnemonicOp_DI, .reg = &register_file.di, .mask = 0xFFFF, .r_shift = 0},
+        {.mnemonic_op = S86_MnemonicOp_SP, .mnemonic_op_reg16 = S86_MnemonicOp_SP, .reg = &register_file.sp, .byte = S86_RegisterByte_Nil},
+        {.mnemonic_op = S86_MnemonicOp_BP, .mnemonic_op_reg16 = S86_MnemonicOp_BP, .reg = &register_file.bp, .byte = S86_RegisterByte_Nil},
+        {.mnemonic_op = S86_MnemonicOp_SI, .mnemonic_op_reg16 = S86_MnemonicOp_SI, .reg = &register_file.si, .byte = S86_RegisterByte_Nil},
+        {.mnemonic_op = S86_MnemonicOp_DI, .mnemonic_op_reg16 = S86_MnemonicOp_DI, .reg = &register_file.di, .byte = S86_RegisterByte_Nil},
 
-        {.mnemonic_op = S86_MnemonicOp_ES, .mnemonic_op_reg16 = S86_MnemonicOp_ES, .reg = &register_file.es, .mask = 0xFFFF, .r_shift = 0},
-        {.mnemonic_op = S86_MnemonicOp_CS, .mnemonic_op_reg16 = S86_MnemonicOp_CS, .reg = &register_file.cs, .mask = 0xFFFF, .r_shift = 0},
-        {.mnemonic_op = S86_MnemonicOp_SS, .mnemonic_op_reg16 = S86_MnemonicOp_SS, .reg = &register_file.ss, .mask = 0xFFFF, .r_shift = 0},
-        {.mnemonic_op = S86_MnemonicOp_DS, .mnemonic_op_reg16 = S86_MnemonicOp_DS, .reg = &register_file.ds, .mask = 0xFFFF, .r_shift = 0},
+        {.mnemonic_op = S86_MnemonicOp_ES, .mnemonic_op_reg16 = S86_MnemonicOp_ES, .reg = &register_file.es, .byte = S86_RegisterByte_Nil},
+        {.mnemonic_op = S86_MnemonicOp_CS, .mnemonic_op_reg16 = S86_MnemonicOp_CS, .reg = &register_file.cs, .byte = S86_RegisterByte_Nil},
+        {.mnemonic_op = S86_MnemonicOp_SS, .mnemonic_op_reg16 = S86_MnemonicOp_SS, .reg = &register_file.ss, .byte = S86_RegisterByte_Nil},
+        {.mnemonic_op = S86_MnemonicOp_DS, .mnemonic_op_reg16 = S86_MnemonicOp_DS, .reg = &register_file.ds, .byte = S86_RegisterByte_Nil},
     };
 
     while (S86_BufferIteratorHasMoreBytes(buffer_it)) {
@@ -1186,56 +1202,302 @@ int main(int argc, char **argv)
         if (opcode.mnemonic == S86_Mnemonic_LOCK || opcode.mnemonic == S86_Mnemonic_SEGMENT)
             continue;
 
-        if (exec_mode && opcode.mnemonic == S86_Mnemonic_MOV) {
-            S86_MnemonicOpToRegisterFileMap const *dest_map = NULL;
-            for (size_t index = 0; !dest_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
-                S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
-                if (item->mnemonic_op == opcode.dest)
-                    dest_map = item;
-            }
+        if (!exec_mode) {
+            S86_Print(S86_STR8("\n"));
+            continue;
+        }
 
-            S86_ASSERT(dest_map);
-            uint16_t *dest      = dest_map->reg;
-            uint16_t src        = 0;
+        bool prev_sign_flag = register_file.sign_flag;
+        bool prev_zero_flag = register_file.zero_flag;
+        switch (opcode.mnemonic) {
+            case S86_Mnemonic_PUSH:          /*FALLTHRU*/
+            case S86_Mnemonic_POP:           /*FALLTHRU*/
+            case S86_Mnemonic_XCHG:          /*FALLTHRU*/
+            case S86_Mnemonic_IN:            /*FALLTHRU*/
+            case S86_Mnemonic_OUT:           /*FALLTHRU*/
+            case S86_Mnemonic_XLAT:          /*FALLTHRU*/
+            case S86_Mnemonic_LEA:           /*FALLTHRU*/
+            case S86_Mnemonic_LDS:           /*FALLTHRU*/
+            case S86_Mnemonic_LES:           /*FALLTHRU*/
+            case S86_Mnemonic_LAHF:          /*FALLTHRU*/
+            case S86_Mnemonic_SAHF:          /*FALLTHRU*/
+            case S86_Mnemonic_PUSHF:         /*FALLTHRU*/
+            case S86_Mnemonic_POPF:          /*FALLTHRU*/
+            case S86_Mnemonic_ADC:           /*FALLTHRU*/
+            case S86_Mnemonic_INC:           /*FALLTHRU*/
+            case S86_Mnemonic_AAA:           /*FALLTHRU*/
+            case S86_Mnemonic_DAA:           /*FALLTHRU*/
+            case S86_Mnemonic_SBB:           /*FALLTHRU*/
+            case S86_Mnemonic_DEC:           /*FALLTHRU*/
+            case S86_Mnemonic_NEG:           /*FALLTHRU*/
+            case S86_Mnemonic_AAS:           /*FALLTHRU*/
+            case S86_Mnemonic_DAS:           /*FALLTHRU*/
+            case S86_Mnemonic_MUL:           /*FALLTHRU*/
+            case S86_Mnemonic_IMUL:          /*FALLTHRU*/
+            case S86_Mnemonic_AAM:           /*FALLTHRU*/
+            case S86_Mnemonic_DIV:           /*FALLTHRU*/
+            case S86_Mnemonic_IDIV:          /*FALLTHRU*/
+            case S86_Mnemonic_AAD:           /*FALLTHRU*/
+            case S86_Mnemonic_CBW:           /*FALLTHRU*/
+            case S86_Mnemonic_CWD:           /*FALLTHRU*/
+            case S86_Mnemonic_NOT:           /*FALLTHRU*/
+            case S86_Mnemonic_SHL_SAL:       /*FALLTHRU*/
+            case S86_Mnemonic_SHR:           /*FALLTHRU*/
+            case S86_Mnemonic_SAR:           /*FALLTHRU*/
+            case S86_Mnemonic_ROL:           /*FALLTHRU*/
+            case S86_Mnemonic_ROR:           /*FALLTHRU*/
+            case S86_Mnemonic_RCL:           /*FALLTHRU*/
+            case S86_Mnemonic_RCR:           /*FALLTHRU*/
+            case S86_Mnemonic_AND:           /*FALLTHRU*/
+            case S86_Mnemonic_TEST:          /*FALLTHRU*/
+            case S86_Mnemonic_OR:            /*FALLTHRU*/
+            case S86_Mnemonic_XOR:           /*FALLTHRU*/
+            case S86_Mnemonic_REP:           /*FALLTHRU*/
+            case S86_Mnemonic_CALL:          /*FALLTHRU*/
+            case S86_Mnemonic_JMP:           /*FALLTHRU*/
+            case S86_Mnemonic_RET:           /*FALLTHRU*/
+            case S86_Mnemonic_JE_JZ:         /*FALLTHRU*/
+            case S86_Mnemonic_JL_JNGE:       /*FALLTHRU*/
+            case S86_Mnemonic_JLE_JNG:       /*FALLTHRU*/
+            case S86_Mnemonic_JB_JNAE:       /*FALLTHRU*/
+            case S86_Mnemonic_JBE_JNA:       /*FALLTHRU*/
+            case S86_Mnemonic_JP_JPE:        /*FALLTHRU*/
+            case S86_Mnemonic_JO:            /*FALLTHRU*/
+            case S86_Mnemonic_JS:            /*FALLTHRU*/
+            case S86_Mnemonic_JNE_JNZ:       /*FALLTHRU*/
+            case S86_Mnemonic_JNL_JGE:       /*FALLTHRU*/
+            case S86_Mnemonic_JNLE_JG:       /*FALLTHRU*/
+            case S86_Mnemonic_JNB_JAE:       /*FALLTHRU*/
+            case S86_Mnemonic_JNBE_JA:       /*FALLTHRU*/
+            case S86_Mnemonic_JNP_JO:        /*FALLTHRU*/
+            case S86_Mnemonic_JNO:           /*FALLTHRU*/
+            case S86_Mnemonic_JNS:           /*FALLTHRU*/
+            case S86_Mnemonic_LOOP:          /*FALLTHRU*/
+            case S86_Mnemonic_LOOPZ_LOOPE:   /*FALLTHRU*/
+            case S86_Mnemonic_LOOPNZ_LOOPNE: /*FALLTHRU*/
+            case S86_Mnemonic_JCXZ:          /*FALLTHRU*/
+            case S86_Mnemonic_INT:           /*FALLTHRU*/
+            case S86_Mnemonic_INT3:          /*FALLTHRU*/
+            case S86_Mnemonic_INTO:          /*FALLTHRU*/
+            case S86_Mnemonic_IRET:          /*FALLTHRU*/
+            case S86_Mnemonic_CLC:           /*FALLTHRU*/
+            case S86_Mnemonic_CMC:           /*FALLTHRU*/
+            case S86_Mnemonic_STC:           /*FALLTHRU*/
+            case S86_Mnemonic_CLD:           /*FALLTHRU*/
+            case S86_Mnemonic_STD:           /*FALLTHRU*/
+            case S86_Mnemonic_CLI:           /*FALLTHRU*/
+            case S86_Mnemonic_STI:           /*FALLTHRU*/
+            case S86_Mnemonic_HLT:           /*FALLTHRU*/
+            case S86_Mnemonic_WAIT:          /*FALLTHRU*/
+            case S86_Mnemonic_LOCK:          /*FALLTHRU*/
+            case S86_Mnemonic_SEGMENT:       break;
 
-            if (opcode.src == S86_MnemonicOp_Immediate) {
-                src = (uint16_t)opcode.immediate;
-            } else if ((opcode.src >= S86_MnemonicOp_AL && opcode.src <= S86_MnemonicOp_DI) ||
-                       (opcode.src >= S86_MnemonicOp_ES && opcode.src <= S86_MnemonicOp_DS)) {
-                S86_MnemonicOpToRegisterFileMap const *src_map = NULL;
-                for (size_t index = 0; !src_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
+            case S86_Mnemonic_MOV: {
+                S86_MnemonicOpToRegisterFileMap const *dest_map = NULL;
+                for (size_t index = 0; !dest_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
                     S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
-                    if (item->mnemonic_op == opcode.src)
-                        src_map = item;
+                    if (item->mnemonic_op == opcode.dest)
+                        dest_map = item;
+                }
+                S86_ASSERT(dest_map);
+
+                uint16_t prev_dest = dest_map->reg->word;
+                bool byte_op       = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
+                if (opcode.src == S86_MnemonicOp_Immediate) {
+                    if (byte_op) {
+                        S86_ASSERT(opcode.immediate < S86_CAST(uint8_t)-1);
+                        dest_map->reg->bytes[dest_map->byte] = S86_CAST(uint8_t)opcode.immediate;
+                    } else {
+                        S86_ASSERT(opcode.immediate < S86_CAST(uint16_t)-1);
+                        dest_map->reg->word = S86_CAST(uint16_t)opcode.immediate;
+                    }
+                } else {
+                    S86_MnemonicOpToRegisterFileMap const *src_map = NULL;
+                    for (size_t index = 0; !src_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
+                        S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
+                        if (item->mnemonic_op == opcode.src)
+                            src_map = item;
+                    }
+
+                    if (byte_op)
+                        dest_map->reg->bytes[dest_map->byte] = src_map->reg->bytes[src_map->byte];
+                    else
+                        dest_map->reg->word = src_map->reg->word;
                 }
 
-                src = (*src_map->reg & src_map->mask) >> src_map->r_shift;
-            }
+                S86_Str8 dest_reg16 = S86_MnemonicOpStr8(dest_map->mnemonic_op_reg16);
+                S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(dest_reg16), prev_dest, dest_map->reg->word);
+            } break;
 
-            S86_Str8 dest_reg16 = S86_MnemonicOpStr8(dest_map->mnemonic_op_reg16);
-            uint16_t new_dest   = (*dest & ~dest_map->mask) | (src << dest_map->r_shift);
-            S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(dest_reg16), *dest, new_dest);
-            *dest = new_dest;
+            case S86_Mnemonic_ADD: {
+                S86_MnemonicOpToRegisterFileMap const *dest_map = NULL;
+                for (size_t index = 0; !dest_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
+                    S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
+                    if (item->mnemonic_op == opcode.dest)
+                        dest_map = item;
+                }
+                S86_ASSERT(dest_map);
+
+                uint16_t prev_dest = dest_map->reg->word;
+                bool byte_op       = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
+                if (opcode.src == S86_MnemonicOp_Immediate) {
+                    if (byte_op) {
+                        S86_ASSERT(opcode.immediate < S86_CAST(uint8_t)-1);
+                        dest_map->reg->bytes[dest_map->byte] += S86_CAST(uint8_t)opcode.immediate;
+                    } else {
+                        S86_ASSERT(opcode.immediate < S86_CAST(uint16_t)-1);
+                        dest_map->reg->word += S86_CAST(uint16_t)opcode.immediate;
+                    }
+                } else {
+                    S86_MnemonicOpToRegisterFileMap const *src_map = NULL;
+                    for (size_t index = 0; !src_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
+                        S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
+                        if (item->mnemonic_op == opcode.src)
+                            src_map = item;
+                    }
+
+                    if (byte_op)
+                        dest_map->reg->bytes[dest_map->byte] += src_map->reg->bytes[src_map->byte];
+                    else
+                        dest_map->reg->word += src_map->reg->word;
+                }
+
+                S86_Str8 dest_reg16 = S86_MnemonicOpStr8(dest_map->mnemonic_op_reg16);
+
+                register_file.sign_flag = dest_map->reg->word & (byte_op ? 0b0000'0000'1000'0000 : 0b1000'0000'0000'0000);
+                S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(dest_reg16), prev_dest, dest_map->reg->word);
+            } break;
+
+            case S86_Mnemonic_SUB: {
+                S86_MnemonicOpToRegisterFileMap const *dest_map = NULL;
+                for (size_t index = 0; !dest_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
+                    S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
+                    if (item->mnemonic_op == opcode.dest)
+                        dest_map = item;
+                }
+                S86_ASSERT(dest_map);
+
+                uint16_t prev_dest = dest_map->reg->word;
+                bool byte_op       = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
+                if (opcode.src == S86_MnemonicOp_Immediate) {
+                    if (byte_op) {
+                        S86_ASSERT(opcode.immediate < S86_CAST(uint8_t)-1);
+                        dest_map->reg->bytes[dest_map->byte] -= S86_CAST(uint8_t)opcode.immediate;
+                    } else {
+                        S86_ASSERT(opcode.immediate < S86_CAST(uint16_t)-1);
+                        dest_map->reg->word -= S86_CAST(uint16_t)opcode.immediate;
+                    }
+                } else {
+                    S86_MnemonicOpToRegisterFileMap const *src_map = NULL;
+                    for (size_t index = 0; !src_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
+                        S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
+                        if (item->mnemonic_op == opcode.src)
+                            src_map = item;
+                    }
+
+                    if (byte_op)
+                        dest_map->reg->bytes[dest_map->byte] -= src_map->reg->bytes[src_map->byte];
+                    else
+                        dest_map->reg->word -= src_map->reg->word;
+                }
+
+                S86_Str8 dest_reg16 = S86_MnemonicOpStr8(dest_map->mnemonic_op_reg16);
+
+                register_file.zero_flag = byte_op ? dest_map->reg->bytes[dest_map->byte] == 0 : dest_map->reg->word == 0;
+                register_file.sign_flag = dest_map->reg->word & (byte_op ? 0b0000'0000'1000'0000 : 0b1000'0000'0000'0000);
+                S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(dest_reg16), prev_dest, dest_map->reg->word);
+            } break;
+
+            case S86_Mnemonic_CMP: {
+                S86_MnemonicOpToRegisterFileMap const *dest_map = NULL;
+                for (size_t index = 0; !dest_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
+                    S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
+                    if (item->mnemonic_op == opcode.dest)
+                        dest_map = item;
+                }
+                S86_ASSERT(dest_map);
+
+                S86_Register16 dest_copy = *dest_map->reg;
+                S86_Register16 *dest     = &dest_copy;
+
+                bool byte_op = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
+                if (opcode.src == S86_MnemonicOp_Immediate) {
+                    if (byte_op) {
+                        S86_ASSERT(opcode.immediate < S86_CAST(uint8_t)-1);
+                        dest->bytes[dest_map->byte] -= S86_CAST(uint8_t)opcode.immediate;
+                    } else {
+                        S86_ASSERT(opcode.immediate < S86_CAST(uint16_t)-1);
+                        dest->word -= S86_CAST(uint16_t)opcode.immediate;
+                    }
+                } else {
+                    S86_MnemonicOpToRegisterFileMap const *src_map = NULL;
+                    for (size_t index = 0; !src_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
+                        S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
+                        if (item->mnemonic_op == opcode.src)
+                            src_map = item;
+                    }
+
+                    if (byte_op)
+                        dest->bytes[dest_map->byte] -= src_map->reg->bytes[src_map->byte];
+                    else
+                        dest->word -= src_map->reg->word;
+                }
+
+                register_file.sign_flag = dest_map->reg->word & (byte_op ? 0b0000'0000'1000'0000 : 0b1000'0000'0000'0000);
+                S86_PrintFmt(" ; ");
+            } break;
+        }
+
+        if (register_file.sign_flag != prev_sign_flag) {
+            if (register_file.sign_flag) {
+                S86_PrintFmt("flags:->S ");
+            } else {
+                S86_PrintFmt("flags:S-> ");
+            }
+        }
+
+        if (register_file.zero_flag != prev_zero_flag) {
+            if (register_file.zero_flag) {
+                S86_PrintFmt("flags:->PZ ");
+            } else {
+                S86_PrintFmt("flags:PZ-> ");
+            }
         }
         S86_Print(S86_STR8("\n"));
     }
 
     if (exec_mode) {
         S86_PrintLn(S86_STR8("\nFinal registers:"));
-        S86_PrintLnFmt("      ax: 0x%04x (%u)", register_file.ax, register_file.ax);
-        S86_PrintLnFmt("      bx: 0x%04x (%u)", register_file.bx, register_file.bx);
-        S86_PrintLnFmt("      cx: 0x%04x (%u)", register_file.cx, register_file.cx);
-        S86_PrintLnFmt("      dx: 0x%04x (%u)", register_file.dx, register_file.dx);
-        S86_PrintLnFmt("      sp: 0x%04x (%u)", register_file.sp, register_file.sp);
-        S86_PrintLnFmt("      bp: 0x%04x (%u)", register_file.bp, register_file.bp);
-        S86_PrintLnFmt("      si: 0x%04x (%u)", register_file.si, register_file.si);
-        S86_PrintLnFmt("      di: 0x%04x (%u)", register_file.di, register_file.di);
-        if (register_file.es)
+        if (register_file.ax.word)
+            S86_PrintLnFmt("      ax: 0x%04x (%u)", register_file.ax.word, register_file.ax.word);
+        if (register_file.bx.word)
+            S86_PrintLnFmt("      bx: 0x%04x (%u)", register_file.bx.word, register_file.bx.word);
+        if (register_file.cx.word)
+            S86_PrintLnFmt("      cx: 0x%04x (%u)", register_file.cx.word, register_file.cx.word);
+        if (register_file.dx.word)
+            S86_PrintLnFmt("      dx: 0x%04x (%u)", register_file.dx.word, register_file.dx.word);
+        if (register_file.sp.word)
+            S86_PrintLnFmt("      sp: 0x%04x (%u)", register_file.sp.word, register_file.sp.word);
+        if (register_file.bp.word)
+            S86_PrintLnFmt("      bp: 0x%04x (%u)", register_file.bp.word, register_file.bp.word);
+        if (register_file.si.word)
+            S86_PrintLnFmt("      si: 0x%04x (%u)", register_file.si.word, register_file.si.word);
+        if (register_file.di.word)
+            S86_PrintLnFmt("      di: 0x%04x (%u)", register_file.di.word, register_file.di.word);
+        if (register_file.es.word)
             S86_PrintLnFmt("      es: 0x%04x (%u)", register_file.es, register_file.es);
-        if (register_file.ss)
+        if (register_file.ss.word)
             S86_PrintLnFmt("      ss: 0x%04x (%u)", register_file.ss, register_file.ss);
-        if (register_file.ds)
+        if (register_file.ds.word)
             S86_PrintLnFmt("      ds: 0x%04x (%u)", register_file.ds, register_file.ds);
+        if (register_file.zero_flag || register_file.sign_flag) {
+            S86_PrintFmt("   flags:");
+            if (register_file.zero_flag)
+                S86_PrintFmt(" PZ");
+            if (register_file.sign_flag)
+                S86_PrintFmt(" S");
+            S86_Print(S86_STR8("\n"));
+        }
         S86_Print(S86_STR8("\n"));
     }
 }
