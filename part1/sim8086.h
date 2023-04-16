@@ -333,6 +333,7 @@ typedef struct S86_Opcode {
     S86_MnemonicOp       dest;                     ///< Destination op for the mnemonic
     int32_t              displacement;             ///< Opcode has displacement/data/offset
     int32_t              immediate;                ///< Immediate value when src/dest op is an immediate
+    bool                 immediate_is_8bit;        ///< Immediate was 8bit and sign extended
     S86_MnemonicOp       seg_reg_prefix;           ///< Segment register that should prefix the upcoming instruction
 } S86_Opcode;
 

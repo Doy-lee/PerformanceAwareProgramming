@@ -22,15 +22,16 @@ typedef enum S86_RegisterByte {
 
 typedef union S86_Register16 {
     uint16_t word;
-    struct { uint8_t lo; uint8_t hi; } byte;
     uint8_t bytes[S86_RegisterByte_Count];
 } S86_Register16;
 
 typedef struct S86_RegisterFileFlags {
+    bool carry;
     bool zero;
     bool sign;
-    bool parity;
     bool overflow;
+    bool parity;
+    bool auxiliary_carry;
 } S86_RegisterFileFlags;
 
 typedef struct S86_RegisterFile {
@@ -54,10 +55,12 @@ typedef struct S86_RegisterFile {
 
 bool S86_RegisterFileFlagsEq(S86_RegisterFileFlags lhs, S86_RegisterFileFlags rhs)
 {
-    bool result = lhs.sign     == rhs.sign   &&
-                  lhs.zero     == rhs.zero   &&
-                  lhs.parity   == rhs.parity &&
-                  lhs.overflow == rhs.overflow;
+    bool result = lhs.carry           == rhs.carry    &&
+                  lhs.zero            == rhs.zero     &&
+                  lhs.sign            == rhs.sign     &&
+                  lhs.overflow        == rhs.overflow &&
+                  lhs.parity          == rhs.parity   &&
+                  lhs.auxiliary_carry == rhs.auxiliary_carry;
     return result;
 }
 
@@ -278,7 +281,11 @@ void S86_PrintOpcodeMnemonicOp(S86_Opcode opcode, bool src)
                      opcode.displacement > 0 ? '+' : '-',
                      opcode.displacement > 0 ? opcode.displacement : -opcode.displacement);
     } else if (mnemonic_op == S86_MnemonicOp_Immediate) {
-        S86_PrintFmt("%u", opcode.immediate);
+        if (opcode.immediate_is_8bit) {
+            S86_PrintFmt("%d", (int8_t)opcode.immediate);
+        } else {
+            S86_PrintFmt("%u", (uint16_t)opcode.immediate);
+        }
     } else if (mnemonic_op == S86_MnemonicOp_DirectInterSegment) {
         uint16_t left  = (uint32_t)opcode.displacement >> 16;
         uint16_t right = (uint32_t)opcode.displacement  & 0xFFFF;
@@ -623,8 +630,14 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
                      op_decode_type == S86_OpDecodeType_TESTImmediateAndRegOrMem ||
                      op_decode_type == S86_OpDecodeType_ORImmediateToRegOrMem ||
                      op_decode_type == S86_OpDecodeType_XORImmediateToRegOrMem) && s) {
-                    // NOTE: Sign extend 8 bit, since we store into a
-                    // int32_t in opcode this is done for free for us.
+                    // NOTE: Sign extend 8 bit to 16 bit
+                    uint16_t sign_mask = 0b1000'0000;
+                    uint8_t data_u8    = S86_CAST(uint8_t)data;
+                    if (sign_mask & data_u8) {
+                        data = (uint16_t)((uint8_t)~data_u8 + 1); // Convert back to 8 bit unsigned
+                        data = ~data + 1;                         // Convert to 16bit signed
+                        result.immediate_is_8bit = true;
+                    }
                 } else {
                     uint8_t data_hi = S86_BufferIteratorNextByte(buffer_it);
                     data |= (uint16_t)(data_hi) << 8;
@@ -635,8 +648,16 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
                 S86_ASSERT(mod != 0b11); // NOTE: Op is IMM->Reg, register-to-register not permitted
             }
 
-            result.immediate = data;
-            result.src       = S86_MnemonicOp_Immediate;
+            // NOTE: Sign extend 16bit to 32bit
+            uint16_t sign_mask16 = 0b1000'0000'0000'0000;
+            if (data & sign_mask16) {
+                uint32_t data_no_sign_bit = (uint32_t)((uint16_t)~data + 1); // Convert back to 16 bit unsigned
+                result.immediate = ~data_no_sign_bit + 1;                    // Convert to signed 32bit
+            } else {
+                result.immediate = data;
+            }
+
+            result.src = S86_MnemonicOp_Immediate;
             if (op_decode_type == S86_OpDecodeType_MOVImmediateToRegOrMem)
                 result.wide_prefix = S86_WidePrefix_Src;
             else if (result.effective_addr_loads_mem)
@@ -1362,17 +1383,19 @@ int main(int argc, char **argv)
                 }
                 S86_ASSERT(dest_map);
 
-                uint16_t sign        = opcode.mnemonic == S86_Mnemonic_ADD ? 1 : -1;
-                S86_Register16 dest  = *dest_map->reg;
-                uint16_t prev_dest16 = dest.word;
-                bool byte_op         = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
+                bool subtract            = opcode.mnemonic != S86_Mnemonic_ADD;
+                S86_Register16 dest      = *dest_map->reg;
+                S86_Register16 prev_dest = dest;
+                bool byte_op             = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
+
+                uint16_t src = 0;
                 if (opcode.src == S86_MnemonicOp_Immediate) {
                     if (byte_op) {
                         S86_ASSERT(opcode.immediate < S86_CAST(uint8_t)-1);
-                        dest.bytes[dest_map->byte] += S86_CAST(uint8_t)(opcode.immediate * sign);
+                        src = S86_CAST(uint8_t)opcode.immediate;
                     } else {
                         S86_ASSERT(opcode.immediate < S86_CAST(uint16_t)-1);
-                        dest.word += S86_CAST(uint16_t)(opcode.immediate * sign);
+                        src = S86_CAST(uint16_t)opcode.immediate;
                     }
                 } else {
                     S86_MnemonicOpToRegisterFileMap const *src_map = NULL;
@@ -1381,25 +1404,83 @@ int main(int argc, char **argv)
                         if (item->mnemonic_op == opcode.src)
                             src_map = item;
                     }
-
-                    if (byte_op)
-                        dest.bytes[dest_map->byte] += S86_CAST(uint8_t)(src_map->reg->bytes[src_map->byte] * sign);
-                    else
-                        dest.word += S86_CAST(uint16_t)(src_map->reg->word * sign);
+                    src = byte_op ? src_map->reg->bytes[src_map->byte] : src_map->reg->word;
                 }
 
-                int bit_count              = _mm_popcnt_u32(S86_CAST(uint32_t)dest.bytes[S86_RegisterByte_Lo]);
-                register_file.flags.parity = (bit_count % 2 == 0);
+                // NOTE: Overflow if the sign masks were initially the same,
+                // but, after the operation the sign masked changed.
+                uint8_t  const sign_mask8  = 0b1000'0000;
+                uint16_t const sign_mask16 = 0b1000'0000'0000'0000;
+                if (byte_op) {
+                    uint8_t src_u8 = S86_CAST(uint8_t)src;
+                    if (subtract)
+                        src_u8 = ~src_u8 + 1;
 
-                S86_Str8 dest_reg16      = S86_MnemonicOpStr8(dest_map->mnemonic_op_reg16);
-                register_file.flags.sign = dest_map->reg->word & (byte_op ? 0b0000'0000'1000'0000 : 0b1000'0000'0000'0000);
+                    uint8_t dest_u8     = dest.bytes[dest_map->byte];
+                    uint8_t new_dest_u8 = dest_u8 + src_u8;
+
+                    // NOTE: Overflow check
+                    bool initially_matching_sign_masks = (dest_u8 & sign_mask8) == (src_u8 & sign_mask8);
+                    bool sign_masks_changed            = (dest_u8 & sign_mask8) != (new_dest_u8 & sign_mask8);
+                    register_file.flags.overflow       = initially_matching_sign_masks && sign_masks_changed;
+
+                    // NOTE: Carry check
+                    register_file.flags.carry          = subtract ? new_dest_u8 > dest_u8 : new_dest_u8 < dest_u8;
+
+                    // NOTE: Auxiliary carry check
+                    uint8_t     dest_u8_nibble_lo =     dest_u8 & 0b0000'1111 >> 0;
+                    uint8_t     dest_u8_nibble_hi =     dest_u8 & 0b1111'0000 >> 4;
+                    uint8_t new_dest_u8_nibble_lo = new_dest_u8 & 0b0000'1111 >> 0;
+                    uint8_t new_dest_u8_nibble_hi = new_dest_u8 & 0b1111'0000 >> 4;
+                    register_file.flags.auxiliary_carry = subtract ? new_dest_u8_nibble_hi > dest_u8_nibble_hi
+                                                                     : new_dest_u8_nibble_lo < dest_u8_nibble_lo;
+
+                    // NOTE: Sign check
+                    register_file.flags.sign = new_dest_u8 & 0b1000'0000;
+
+                    // NOTE: Update the register
+                    dest.bytes[dest_map->byte] = new_dest_u8;
+                } else {
+                    if (subtract)
+                        src = ~src + 1;
+
+                    S86_Register16 new_dest = {0};
+                    new_dest.word           = dest.word + src;
+
+                    // NOTE: Overflow check
+                    bool initially_matching_sign_masks = (dest.word & sign_mask16) == (src           & sign_mask16);
+                    bool sign_masks_changed            = (dest.word & sign_mask16) != (new_dest.word & sign_mask16);
+                    register_file.flags.overflow       = initially_matching_sign_masks && sign_masks_changed;
+
+                    // NOTE: Auxiliary carry check
+                    uint8_t     dest_lo_nibble_lo =     dest.bytes[S86_RegisterByte_Lo] & 0b0000'1111 >> 0;
+                    uint8_t     dest_lo_nibble_hi =     dest.bytes[S86_RegisterByte_Lo] & 0b1111'0000 >> 4;
+                    uint8_t new_dest_lo_nibble_lo = new_dest.bytes[S86_RegisterByte_Lo] & 0b0000'1111 >> 0;
+                    uint8_t new_dest_lo_nibble_hi = new_dest.bytes[S86_RegisterByte_Lo] & 0b1111'0000 >> 4;
+                    register_file.flags.auxiliary_carry = subtract ? new_dest_lo_nibble_hi > dest_lo_nibble_hi
+                                                                   : new_dest_lo_nibble_lo < dest_lo_nibble_lo;
+
+                    // NOTE: Carry check
+                    register_file.flags.carry = subtract ? new_dest.word > dest.word : new_dest.word < dest.word;
+
+                    // NOTE: Sign check
+                    register_file.flags.sign = new_dest.word & 0b1000'0000'0000'0000;
+
+                    // NOTE: Update the register
+                    dest.word = new_dest.word;
+                }
+
+                int lo_bit_count           = _mm_popcnt_u32(S86_CAST(uint32_t)dest.bytes[S86_RegisterByte_Lo]);
+                register_file.flags.parity = lo_bit_count % 2 == 0;
+                register_file.flags.zero   = false;
+                if (opcode.mnemonic == S86_Mnemonic_ADD || opcode.mnemonic == S86_Mnemonic_SUB)
+                    register_file.flags.zero = byte_op ? dest.bytes[dest_map->byte] == 0 : dest.word == 0;
 
                 if (opcode.mnemonic == S86_Mnemonic_CMP) {
                     S86_PrintFmt(" ; ");
                 } else {
-                    if (opcode.mnemonic == S86_Mnemonic_SUB)
-                        register_file.flags.zero = byte_op ? dest.bytes[dest_map->byte] == 0 : dest.word == 0;
-                    S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(dest_reg16), prev_dest16, dest.word);
+                    S86_Str8 dest_reg16 = S86_MnemonicOpStr8(dest_map->mnemonic_op_reg16);
+                    S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(dest_reg16), prev_dest.word, dest.word);
                     *dest_map->reg = dest;
                 }
             } break;
@@ -1407,23 +1488,31 @@ int main(int argc, char **argv)
 
         if (!S86_RegisterFileFlagsEq(register_file.flags, prev_flags)) {
             S86_PrintFmt("flags:");
-            if (prev_flags.parity && !register_file.flags.parity)
+            if (prev_flags.carry)
+                S86_PrintFmt("C");
+            if (prev_flags.parity)
                 S86_PrintFmt("P");
-            if (prev_flags.zero && !register_file.flags.zero)
+            if (prev_flags.auxiliary_carry)
+                S86_PrintFmt("A");
+            if (prev_flags.zero)
                 S86_PrintFmt("Z");
-            if (prev_flags.sign && !register_file.flags.sign)
+            if (prev_flags.sign)
                 S86_PrintFmt("S");
-            if (prev_flags.overflow && !register_file.flags.overflow)
+            if (prev_flags.overflow)
                 S86_PrintFmt("O");
 
             S86_PrintFmt("->");
-            if (!prev_flags.parity && register_file.flags.parity)
+            if (register_file.flags.carry)
+                S86_PrintFmt("C");
+            if (register_file.flags.parity)
                 S86_PrintFmt("P");
-            if (!prev_flags.zero && register_file.flags.zero)
+            if (register_file.flags.auxiliary_carry)
+                S86_PrintFmt("A");
+            if (register_file.flags.zero)
                 S86_PrintFmt("Z");
-            if (!prev_flags.sign && register_file.flags.sign)
+            if (register_file.flags.sign)
                 S86_PrintFmt("S");
-            if (!prev_flags.overflow && register_file.flags.overflow)
+            if (register_file.flags.overflow)
                 S86_PrintFmt("O");
             S86_PrintFmt(" ");
         }
@@ -1458,8 +1547,12 @@ int main(int argc, char **argv)
         S86_RegisterFileFlags nil_flags = {0};
         if (!S86_RegisterFileFlagsEq(register_file.flags, nil_flags)) {
             S86_PrintFmt("   flags: ");
+            if (register_file.flags.carry)
+                S86_PrintFmt("C");
             if (register_file.flags.parity)
                 S86_PrintFmt("P");
+            if (register_file.flags.auxiliary_carry)
+                S86_PrintFmt("A");
             if (register_file.flags.zero)
                 S86_PrintFmt("Z");
             if (register_file.flags.sign)
