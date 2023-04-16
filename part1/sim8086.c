@@ -1,3 +1,13 @@
+#define WIN32_MEAN_AND_LEAN
+#define NOMINMAX
+#include <Windows.h>
+#include <immintrin.h>
+
+#include <stdint.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <stdbool.h>
+
 #include "sim8086_stdlib.h"
 #include "sim8086.h"
 
@@ -16,11 +26,15 @@ typedef union S86_Register16 {
     uint8_t bytes[S86_RegisterByte_Count];
 } S86_Register16;
 
+typedef struct S86_RegisterFileFlags {
+    bool zero;
+    bool sign;
+    bool parity;
+    bool overflow;
+} S86_RegisterFileFlags;
+
 typedef struct S86_RegisterFile {
-    bool zero_flag;
-    bool sign_flag;
-    bool parity_flag;
-    bool overflow_flag;
+    S86_RegisterFileFlags flags;
 
     S86_Register16 ax;
     S86_Register16 bx;
@@ -37,6 +51,15 @@ typedef struct S86_RegisterFile {
     S86_Register16 ss;
     S86_Register16 ds;
 } S86_RegisterFile;
+
+bool S86_RegisterFileFlagsEq(S86_RegisterFileFlags lhs, S86_RegisterFileFlags rhs)
+{
+    bool result = lhs.sign     == rhs.sign   &&
+                  lhs.zero     == rhs.zero   &&
+                  lhs.parity   == rhs.parity &&
+                  lhs.overflow == rhs.overflow;
+    return result;
+}
 
 S86_Str8 S86_MnemonicStr8(S86_Mnemonic type)
 {
@@ -1207,8 +1230,7 @@ int main(int argc, char **argv)
             continue;
         }
 
-        bool prev_sign_flag = register_file.sign_flag;
-        bool prev_zero_flag = register_file.zero_flag;
+        S86_RegisterFileFlags prev_flags = register_file.flags;
         switch (opcode.mnemonic) {
             case S86_Mnemonic_PUSH:          /*FALLTHRU*/
             case S86_Mnemonic_POP:           /*FALLTHRU*/
@@ -1366,33 +1388,44 @@ int main(int argc, char **argv)
                         dest.word += S86_CAST(uint16_t)(src_map->reg->word * sign);
                 }
 
-                S86_Str8 dest_reg16     = S86_MnemonicOpStr8(dest_map->mnemonic_op_reg16);
-                register_file.sign_flag = dest_map->reg->word & (byte_op ? 0b0000'0000'1000'0000 : 0b1000'0000'0000'0000);
+                int bit_count              = _mm_popcnt_u32(S86_CAST(uint32_t)dest.bytes[S86_RegisterByte_Lo]);
+                register_file.flags.parity = (bit_count % 2 == 0);
+
+                S86_Str8 dest_reg16      = S86_MnemonicOpStr8(dest_map->mnemonic_op_reg16);
+                register_file.flags.sign = dest_map->reg->word & (byte_op ? 0b0000'0000'1000'0000 : 0b1000'0000'0000'0000);
+
                 if (opcode.mnemonic == S86_Mnemonic_CMP) {
                     S86_PrintFmt(" ; ");
                 } else {
                     if (opcode.mnemonic == S86_Mnemonic_SUB)
-                        register_file.zero_flag = byte_op ? dest.bytes[dest_map->byte] == 0 : dest.word == 0;
+                        register_file.flags.zero = byte_op ? dest.bytes[dest_map->byte] == 0 : dest.word == 0;
                     S86_PrintFmt(" ; %.*s:0x%x->0x%x ", S86_STR8_FMT(dest_reg16), prev_dest16, dest.word);
                     *dest_map->reg = dest;
                 }
             } break;
         }
 
-        if (register_file.sign_flag != prev_sign_flag) {
-            if (register_file.sign_flag) {
-                S86_PrintFmt("flags:->S ");
-            } else {
-                S86_PrintFmt("flags:S-> ");
-            }
-        }
+        if (!S86_RegisterFileFlagsEq(register_file.flags, prev_flags)) {
+            S86_PrintFmt("flags:");
+            if (prev_flags.parity && !register_file.flags.parity)
+                S86_PrintFmt("P");
+            if (prev_flags.zero && !register_file.flags.zero)
+                S86_PrintFmt("Z");
+            if (prev_flags.sign && !register_file.flags.sign)
+                S86_PrintFmt("S");
+            if (prev_flags.overflow && !register_file.flags.overflow)
+                S86_PrintFmt("O");
 
-        if (register_file.zero_flag != prev_zero_flag) {
-            if (register_file.zero_flag) {
-                S86_PrintFmt("flags:->PZ ");
-            } else {
-                S86_PrintFmt("flags:PZ-> ");
-            }
+            S86_PrintFmt("->");
+            if (!prev_flags.parity && register_file.flags.parity)
+                S86_PrintFmt("P");
+            if (!prev_flags.zero && register_file.flags.zero)
+                S86_PrintFmt("Z");
+            if (!prev_flags.sign && register_file.flags.sign)
+                S86_PrintFmt("S");
+            if (!prev_flags.overflow && register_file.flags.overflow)
+                S86_PrintFmt("O");
+            S86_PrintFmt(" ");
         }
         S86_Print(S86_STR8("\n"));
     }
@@ -1421,12 +1454,18 @@ int main(int argc, char **argv)
             S86_PrintLnFmt("      ss: 0x%04x (%u)", register_file.ss, register_file.ss);
         if (register_file.ds.word)
             S86_PrintLnFmt("      ds: 0x%04x (%u)", register_file.ds, register_file.ds);
-        if (register_file.zero_flag || register_file.sign_flag) {
-            S86_PrintFmt("   flags:");
-            if (register_file.zero_flag)
-                S86_PrintFmt(" PZ");
-            if (register_file.sign_flag)
-                S86_PrintFmt(" S");
+
+        S86_RegisterFileFlags nil_flags = {0};
+        if (!S86_RegisterFileFlagsEq(register_file.flags, nil_flags)) {
+            S86_PrintFmt("   flags: ");
+            if (register_file.flags.parity)
+                S86_PrintFmt("P");
+            if (register_file.flags.zero)
+                S86_PrintFmt("Z");
+            if (register_file.flags.sign)
+                S86_PrintFmt("S");
+            if (register_file.flags.overflow)
+                S86_PrintFmt("O");
             S86_Print(S86_STR8("\n"));
         }
         S86_Print(S86_STR8("\n"));

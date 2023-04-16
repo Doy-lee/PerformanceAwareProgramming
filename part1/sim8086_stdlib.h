@@ -1,12 +1,3 @@
-#define WIN32_MEAN_AND_LEAN
-#define NOMINMAX
-#include <Windows.h>
-
-#include <stdint.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <stdbool.h>
-
 // NOTE: Macros
 // ============================================================================
 #define S86_STRINGIFY2(token) #token
