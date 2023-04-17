@@ -315,12 +315,6 @@ typedef enum S86_EffectiveAddress {
     S86_EffectiveAddress_Dest,
 } S86_EffectiveAddress;
 
-typedef enum S86_WidePrefix {
-    S86_WidePrefix_None,
-    S86_WidePrefix_Src,
-    S86_WidePrefix_Dest,
-} S86_WidePrefix;
-
 typedef struct S86_Opcode {
     uint8_t              byte_size;                ///< Number of bytes used to encode this opcode
     uint16_t             instruction_ptr;          ///< The instruction pointer value at this opcode
@@ -331,7 +325,6 @@ typedef struct S86_Opcode {
     bool                 lock_prefix;              ///< Prefix the opcode with "lock" instruction
     bool                 rep_prefix;               ///< Prefix the opcode with "rep" instruction
     bool                 wide;                     ///< Opcode has the 'w' flag set
-    S86_WidePrefix       wide_prefix;              ///< Mnemonic src/dest op requires a 'word' or 'byte' prefix (e.g. ambiguous immediate size)
     S86_MnemonicOp       src;                      ///< Source op for the mnemonic
     S86_MnemonicOp       dest;                     ///< Destination op for the mnemonic
     int32_t              displacement;             ///< Opcode has displacement/data/offset

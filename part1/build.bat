@@ -190,3 +190,33 @@ nasm %build_dir_listing_0050%_disassembled.asm
 
 fc /B %build_dir_listing_0050%     %build_dir_listing_0050%_disassembled     || exit /b 1
 fc /N %build_dir_listing_0050%.txt %build_dir_listing_0050%_disassembled.txt || exit /b 1
+
+REM ================================================================================================
+set listing_0051=listing_0051_memory_mov
+set build_dir_listing_0051=%build_dir%\%listing_0051%
+
+copy /Y %script_dir%\%listing_0051% %build_dir% 1>NUL
+copy /Y %script_dir%\%listing_0051%.txt %build_dir% 1>NUL
+
+%build_dir%\sim8086.exe --exec --log-instruction-ptr %build_dir_listing_0051% > %build_dir_listing_0051%_disassembled.txt
+%build_dir%\sim8086.exe                              %build_dir_listing_0051% > %build_dir_listing_0051%_disassembled.asm
+
+nasm %build_dir_listing_0051%_disassembled.asm
+
+fc /B %build_dir_listing_0051%     %build_dir_listing_0051%_disassembled     || exit /b 1
+fc /N %build_dir_listing_0051%.txt %build_dir_listing_0051%_disassembled.txt || exit /b 1
+
+REM ================================================================================================
+set listing_0052=listing_0052_memory_add_loop
+set build_dir_listing_0052=%build_dir%\%listing_0052%
+
+copy /Y %script_dir%\%listing_0052% %build_dir% 1>NUL
+copy /Y %script_dir%\%listing_0052%.txt %build_dir% 1>NUL
+
+%build_dir%\sim8086.exe --exec --log-instruction-ptr %build_dir_listing_0052% > %build_dir_listing_0052%_disassembled.txt
+%build_dir%\sim8086.exe                              %build_dir_listing_0052% > %build_dir_listing_0052%_disassembled.asm
+
+nasm %build_dir_listing_0052%_disassembled.asm
+
+fc /B %build_dir_listing_0052%     %build_dir_listing_0052%_disassembled     || exit /b 1
+fc /N %build_dir_listing_0052%.txt %build_dir_listing_0052%_disassembled.txt || exit /b 1
