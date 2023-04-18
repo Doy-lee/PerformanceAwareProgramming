@@ -220,3 +220,18 @@ nasm %build_dir_listing_0052%_disassembled.asm
 
 fc /B %build_dir_listing_0052%     %build_dir_listing_0052%_disassembled     || exit /b 1
 fc /N %build_dir_listing_0052%.txt %build_dir_listing_0052%_disassembled.txt || exit /b 1
+
+REM ================================================================================================
+set listing_0053=listing_0053_add_loop_challenge
+set build_dir_listing_0053=%build_dir%\%listing_0053%
+
+copy /Y %script_dir%\%listing_0053% %build_dir% 1>NUL
+copy /Y %script_dir%\%listing_0053%.txt %build_dir% 1>NUL
+
+%build_dir%\sim8086.exe --exec --log-instruction-ptr %build_dir_listing_0053% > %build_dir_listing_0053%_disassembled.txt
+%build_dir%\sim8086.exe                              %build_dir_listing_0053% > %build_dir_listing_0053%_disassembled.asm
+
+nasm %build_dir_listing_0053%_disassembled.asm
+
+fc /B %build_dir_listing_0053%     %build_dir_listing_0053%_disassembled     || exit /b 1
+fc /N %build_dir_listing_0053%.txt %build_dir_listing_0053%_disassembled.txt || exit /b 1

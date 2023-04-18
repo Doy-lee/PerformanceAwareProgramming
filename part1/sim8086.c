@@ -231,19 +231,6 @@ void S86_PrintOpcodeMnemonicOp(S86_Opcode opcode, bool src)
     bool effective_addr = ( src && opcode.effective_addr == S86_EffectiveAddress_Src) ||
                           (!src && opcode.effective_addr == S86_EffectiveAddress_Dest);
 
-    bool wide_prefix = false;
-    if (opcode.effective_addr == S86_EffectiveAddress_Dest && opcode.effective_addr_loads_mem) {
-        if (opcode.src == S86_MnemonicOp_DirectAddress ||
-            opcode.src == S86_MnemonicOp_Immediate ||
-            opcode.src == S86_MnemonicOp_Invalid ||
-            (opcode.src >= S86_MnemonicOp_AL && opcode.src <= S86_MnemonicOp_BH) ||
-            (opcode.src == S86_MnemonicOp_SI)) {
-            // TODO: Not sure why SI needs the prefix as well, but, according 
-            // to the reference decoder its being emitted here.
-            wide_prefix = (src == false); // NOTE: Only print on the dest op
-        }
-    }
-
     if (mnemonic_op == S86_MnemonicOp_Invalid)
         return;
 
@@ -252,8 +239,8 @@ void S86_PrintOpcodeMnemonicOp(S86_Opcode opcode, bool src)
     else
         S86_PrintFmt(" ");
 
-    if (wide_prefix)
-        S86_PrintFmt("%s ", opcode.wide ? "word" : "byte");
+    if (!src && opcode.word_byte_prefix != S86_WordBytePrefix_None)
+        S86_PrintFmt("%s ", opcode.word_byte_prefix == S86_WordBytePrefix_Word ? "word" : "byte");
 
     if (effective_addr && opcode.seg_reg_prefix != S86_MnemonicOp_Invalid) {
         S86_Str8 prefix = S86_MnemonicOpStr8(opcode.seg_reg_prefix);
@@ -844,6 +831,18 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
     if (op_decode_type != S86_OpDecodeType_SEGMENT)
         *seg_reg = S86_MnemonicOp_Invalid;
 
+    if (result.effective_addr == S86_EffectiveAddress_Dest && result.effective_addr_loads_mem) {
+        if (result.src == S86_MnemonicOp_DirectAddress ||
+            result.src == S86_MnemonicOp_Immediate ||
+            result.src == S86_MnemonicOp_Invalid ||
+            (result.src >= S86_MnemonicOp_AL && result.src <= S86_MnemonicOp_BH) ||
+            (result.src == S86_MnemonicOp_SI)) {
+            // TODO: Not sure why SI needs the prefix as well, but, according 
+            // to the reference decoder its being emitted here.
+            result.word_byte_prefix = result.wide ? S86_WordBytePrefix_Word : S86_WordBytePrefix_Byte;
+        }
+    }
+
     size_t buffer_end_index = buffer_it->index;
     result.byte_size        = S86_CAST(uint8_t)(buffer_end_index - buffer_start_index);
     result.instruction_ptr  = S86_CAST(uint16_t)buffer_start_index;
@@ -1430,7 +1429,8 @@ int main(int argc, char **argv)
                             src_map = item;
                     }
 
-                    if (src_map->mnemonic_op >= S86_MnemonicOp_BX_SI && src_map->mnemonic_op <= S86_MnemonicOp_BP_DI) {
+                    if (src_map->mnemonic_op >= S86_MnemonicOp_BX_SI &&
+                        src_map->mnemonic_op <= S86_MnemonicOp_BP_DI) {
                         uint16_t address = 0;
                         if (src_map->mnemonic_op == S86_MnemonicOp_BX_SI) {
                             address = src_map->reg->word + register_file.reg.file.si.word;
@@ -1524,6 +1524,9 @@ int main(int argc, char **argv)
                         S86_ASSERT(opcode->immediate < S86_CAST(uint16_t)-1);
                         src = S86_CAST(uint16_t)opcode->immediate;
                     }
+                } else if (opcode->src == S86_MnemonicOp_DirectAddress) {
+                    S86_ASSERT(opcode->displacement >= 0);
+                    src = memory[opcode->displacement];
                 } else {
                     S86_MnemonicOpToRegisterFileMap const *src_map = NULL;
                     for (size_t index = 0; !src_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
@@ -1532,14 +1535,21 @@ int main(int argc, char **argv)
                             src_map = item;
                     }
 
-                    if (src_map->mnemonic_op == S86_MnemonicOp_BX_SI) {
-                        src = src_map->reg->word + register_file.reg.file.si.word;
-                    } else if (src_map->mnemonic_op == S86_MnemonicOp_BX_DI) {
-                        src = src_map->reg->word + register_file.reg.file.di.word;
-                    } else if (src_map->mnemonic_op == S86_MnemonicOp_BP_SI) {
-                        src = src_map->reg->word + register_file.reg.file.si.word;
-                    } else if (src_map->mnemonic_op == S86_MnemonicOp_BP_DI) {
-                        src = src_map->reg->word + register_file.reg.file.di.word;
+                    if (src_map->mnemonic_op >= S86_MnemonicOp_BX_SI &&
+                        src_map->mnemonic_op <= S86_MnemonicOp_BP_DI) {
+                        uint16_t address = 0;
+                        if (src_map->mnemonic_op == S86_MnemonicOp_BX_SI) {
+                            address = src_map->reg->word + register_file.reg.file.si.word;
+                        } else if (src_map->mnemonic_op == S86_MnemonicOp_BX_DI) {
+                            address = src_map->reg->word + register_file.reg.file.di.word;
+                        } else if (src_map->mnemonic_op == S86_MnemonicOp_BP_SI) {
+                            address = src_map->reg->word + register_file.reg.file.si.word;
+                        } else if (src_map->mnemonic_op == S86_MnemonicOp_BP_DI) {
+                            address = src_map->reg->word + register_file.reg.file.di.word;
+                        } else {
+                            S86_ASSERT(!"Invalid code path");
+                        }
+                        src = *(uint16_t *)&memory[address];
                     } else {
                         src = byte_op ? src_map->reg->bytes[src_map->byte] : src_map->reg->word;
                     }
