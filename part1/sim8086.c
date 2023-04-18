@@ -831,15 +831,9 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
         *seg_reg = S86_MnemonicOp_Invalid;
 
     if (result.effective_addr == S86_EffectiveAddress_Dest && result.effective_addr_loads_mem) {
-        if (result.src == S86_MnemonicOp_DirectAddress ||
-            result.src == S86_MnemonicOp_Immediate ||
-            result.src == S86_MnemonicOp_Invalid ||
-            (result.src >= S86_MnemonicOp_AL && result.src <= S86_MnemonicOp_BH) ||
-            (result.src == S86_MnemonicOp_SI)) {
-            // TODO: Not sure why SI needs the prefix as well, but, according 
-            // to the reference decoder its being emitted here.
-            result.word_byte_prefix = result.wide ? S86_WordBytePrefix_Word : S86_WordBytePrefix_Byte;
-        }
+        result.word_byte_prefix = (result.wide || result.src >= S86_MnemonicOp_AX && result.src <= S86_MnemonicOp_BX)
+            ? S86_WordBytePrefix_Word
+            : S86_WordBytePrefix_Byte;
     }
 
     size_t buffer_end_index = buffer_it->index;
@@ -856,12 +850,15 @@ typedef struct S86_MnemonicOpToRegisterFileMap {
 
 char const CLI_ARG_EXEC[]                = "--exec";
 char const CLI_ARG_LOG_INSTRUCTION_PTR[] = "--log-instruction-ptr";
+char const CLI_ARG_DUMP[]                = "--dump";
 #define PRINT_USAGE                                                      \
     S86_PrintLnFmt("USAGE: sim8086.exe [%.*s] [%.*s] <binary asm file>", \
                    S86_ARRAY_UCOUNT(CLI_ARG_EXEC) - 1,                   \
                    CLI_ARG_EXEC,                                         \
                    S86_ARRAY_UCOUNT(CLI_ARG_LOG_INSTRUCTION_PTR) - 1,    \
-                   CLI_ARG_LOG_INSTRUCTION_PTR)
+                   CLI_ARG_LOG_INSTRUCTION_PTR,                          \
+                   S86_ARRAY_UCOUNT(CLI_ARG_DUMP) - 1,                   \
+                   CLI_ARG_DUMP)
 int main(int argc, char **argv)
 {
     // NOTE: Argument handling
@@ -873,9 +870,11 @@ int main(int argc, char **argv)
 
     S86_Str8 CLI_ARG_EXEC_STR8                = (S86_Str8){(char *)CLI_ARG_EXEC, S86_ARRAY_UCOUNT(CLI_ARG_EXEC) - 1};
     S86_Str8 CLI_ARG_LOG_INSTRUCTION_PTR_STR8 = (S86_Str8){(char *)CLI_ARG_LOG_INSTRUCTION_PTR, S86_ARRAY_UCOUNT(CLI_ARG_LOG_INSTRUCTION_PTR) - 1};
+    S86_Str8 CLI_ARG_DUMP_STR8                = (S86_Str8){(char *)CLI_ARG_DUMP, S86_ARRAY_UCOUNT(CLI_ARG_DUMP) - 1};
 
     bool exec_mode           = false;
     bool log_instruction_ptr = false;
+    bool dump                = false;
     S86_Str8 file_path       = {0};
     for (int arg_index = 1; arg_index < argc; arg_index++) {
         char const *arg_cstring = argv[arg_index];
@@ -884,6 +883,8 @@ int main(int argc, char **argv)
             exec_mode = true;
         } else if (S86_Str8_Equals(arg_str8, CLI_ARG_LOG_INSTRUCTION_PTR_STR8)) {
             log_instruction_ptr = true;
+        } else if (S86_Str8_Equals(arg_str8, CLI_ARG_DUMP_STR8)) {
+            dump = true;
         } else {
             if (file_path.size) {
                 S86_PrintLnFmt("ERROR: Only 1 ASM binary file is supported per invocation [file=\"%.*s\"]", S86_STR8_FMT(file_path));
@@ -1207,8 +1208,9 @@ int main(int argc, char **argv)
     else
         S86_PrintLn(S86_STR8("bits 16"));
 
+    uint32_t const S86_MEMORY_SIZE = 1024 * 1024;
     S86_RegisterFile register_file = {0};
-    uint8_t *memory                = VirtualAlloc(0, 1024 * 1024, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    uint8_t *memory                = VirtualAlloc(0, S86_MEMORY_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     memcpy(memory, buffer.data, buffer.size);
 
     S86_MnemonicOpToRegisterFileMap mnemonic_op_to_register_file_map[] = {
@@ -1246,15 +1248,16 @@ int main(int argc, char **argv)
 
     // NOTE: Execute the assembly
     // =========================================================================
+    S86_Buffer instruction_buffer     = {0};
+    instruction_buffer.data           = (char *)&memory[register_file.instruction_ptr];
+    instruction_buffer.size           = buffer.size;
+    S86_BufferIterator instruction_it = S86_BufferIteratorInit(instruction_buffer);
+
     bool lock_prefix       = false;
     S86_MnemonicOp seg_reg = S86_CAST(S86_MnemonicOp)0;
     for (uint16_t prev_ip = 0; register_file.instruction_ptr < buffer.size; prev_ip = register_file.instruction_ptr) {
-        S86_Buffer instruction_buffer = {0};
-        instruction_buffer.data       = (char *)&memory[register_file.instruction_ptr];
-        instruction_buffer.size       = buffer.size - register_file.instruction_ptr;
-
-        S86_BufferIterator instruction_it = S86_BufferIteratorInit(instruction_buffer);
-        S86_Opcode opcode                 = S86_DecodeOpcode(&instruction_it, DECODE_TABLE, S86_ARRAY_UCOUNT(DECODE_TABLE), &lock_prefix, &seg_reg);
+        instruction_it.index = register_file.instruction_ptr;
+        S86_Opcode opcode    = S86_DecodeOpcode(&instruction_it, DECODE_TABLE, S86_ARRAY_UCOUNT(DECODE_TABLE), &lock_prefix, &seg_reg);
         S86_PrintOpcode(opcode);
 
         register_file.instruction_ptr += opcode.byte_size;
@@ -1327,7 +1330,6 @@ int main(int argc, char **argv)
             case S86_Mnemonic_JNP_JO:        /*FALLTHRU*/
             case S86_Mnemonic_JNO:           /*FALLTHRU*/
             case S86_Mnemonic_JNS:           /*FALLTHRU*/
-            case S86_Mnemonic_LOOP:          /*FALLTHRU*/
             case S86_Mnemonic_LOOPZ_LOOPE:   /*FALLTHRU*/
             case S86_Mnemonic_JCXZ:          /*FALLTHRU*/
             case S86_Mnemonic_INT:           /*FALLTHRU*/
@@ -1583,6 +1585,12 @@ int main(int argc, char **argv)
                     register_file.instruction_ptr += S86_CAST(int16_t)opcode.displacement;
             } break;
 
+            case S86_Mnemonic_LOOP: {
+                register_file.reg.file.cx.word -= 1;
+                if (register_file.reg.file.cx.word != 0)
+                    register_file.instruction_ptr += S86_CAST(int16_t)opcode.displacement;
+            } break;
+
             case S86_Mnemonic_LOOPNZ_LOOPNE: {
                 register_file.reg.file.cx.word -= 1;
                 if (register_file.reg.file.cx.word != 0 && !register_file.flags.zero)
@@ -1694,5 +1702,11 @@ int main(int argc, char **argv)
             S86_Print(S86_STR8("\n"));
         }
         S86_Print(S86_STR8("\n"));
+    }
+
+    if (dump) {
+        char buf[1024];
+        snprintf(buf, sizeof(buf), "%s_mem_dump.data", file_name);
+        S86_FileWrite(buf, memory, S86_MEMORY_SIZE);
     }
 }

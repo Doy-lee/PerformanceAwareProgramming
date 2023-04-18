@@ -53,6 +53,7 @@ uint8_t S86_BufferIteratorNextByte(S86_BufferIterator *it);
 // ============================================================================
 S86_Buffer S86_FileRead(char const *file_path);
 void S86_FileFree(S86_Buffer buffer);
+bool S86_FileWrite(char const *file_path, void const *buffer, size_t buffer_size);
 
 // NOTE: Print
 // ============================================================================

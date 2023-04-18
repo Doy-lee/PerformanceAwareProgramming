@@ -243,10 +243,29 @@ set build_dir_listing_0054=%build_dir%\%listing_0054%
 copy /Y %script_dir%\%listing_0054% %build_dir% 1>NUL
 copy /Y %script_dir%\%listing_0054%.txt %build_dir% 1>NUL
 
-%build_dir%\sim8086.exe --exec --log-instruction-ptr %build_dir_listing_0054% > %build_dir_listing_0054%_disassembled.txt
-%build_dir%\sim8086.exe                              %build_dir_listing_0054% > %build_dir_listing_0054%_disassembled.asm
+pushd %build_dir%
+%build_dir%\sim8086.exe --exec --log-instruction-ptr --dump %build_dir_listing_0054% > %build_dir_listing_0054%_disassembled.txt
+%build_dir%\sim8086.exe                                     %build_dir_listing_0054% > %build_dir_listing_0054%_disassembled.asm
+popd
 
 nasm %build_dir_listing_0054%_disassembled.asm
 
 fc /B %build_dir_listing_0054%     %build_dir_listing_0054%_disassembled     || exit /b 1
 fc /N %build_dir_listing_0054%.txt %build_dir_listing_0054%_disassembled.txt || exit /b 1
+
+REM ================================================================================================
+set listing_0055=listing_0055_challenge_rectangle
+set build_dir_listing_0055=%build_dir%\%listing_0055%
+
+copy /Y %script_dir%\%listing_0055% %build_dir% 1>NUL
+copy /Y %script_dir%\%listing_0055%.txt %build_dir% 1>NUL
+
+pushd %build_dir%
+%build_dir%\sim8086.exe --exec --log-instruction-ptr --dump %build_dir_listing_0055% > %build_dir_listing_0055%_disassembled.txt
+%build_dir%\sim8086.exe                                     %build_dir_listing_0055% > %build_dir_listing_0055%_disassembled.asm
+popd
+
+nasm %build_dir_listing_0055%_disassembled.asm
+
+fc /B %build_dir_listing_0055%     %build_dir_listing_0055%_disassembled     || exit /b 1
+fc /N %build_dir_listing_0055%.txt %build_dir_listing_0055%_disassembled.txt || exit /b 1

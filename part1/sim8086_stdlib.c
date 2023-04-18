@@ -111,6 +111,42 @@ void S86_FileFree(S86_Buffer buffer)
         VirtualFree(buffer.data, 0, MEM_RELEASE);
 }
 
+bool S86_FileWrite(char const *file_path, void const *buffer, size_t buffer_size)
+{
+    bool result = false;
+
+    // NOTE: Open file
+    // =========================================================================
+    HANDLE file_handle = CreateFile(
+      /*LPCSTR                lpFileName*/ file_path,
+      /*DWORD                 dwDesiredAccess*/ GENERIC_WRITE,
+      /*DWORD                 dwShareMode*/ 0,
+      /*LPSECURITY_ATTRIBUTES lpSecurityAttributes*/ NULL,
+      /*DWORD                 dwCreationDisposition*/ CREATE_ALWAYS,
+      /*DWORD                 dwFlagsAndAttributes*/ 0,
+      /*HANDLE                hTemplateFile*/ NULL
+    );
+
+    if (file_handle == INVALID_HANDLE_VALUE)
+        return result;
+
+    // NOTE: Write file to disk
+    // =========================================================================
+    DWORD bytes_written = 0;
+    BOOL write_file_result = WriteFile(
+      /*HANDLE       hFile*/ file_handle,
+      /*LPVOID       lpBuffer*/ buffer,
+      /*DWORD        nNumberOfBytesToWrite*/ S86_CAST(DWORD)buffer_size,
+      /*LPDWORD      lpNumberOfBytesWrite*/ &bytes_written,
+      /*LPOVERLAPPED lpOverlapped*/ NULL
+    );
+
+    S86_ASSERT(bytes_written == buffer_size);
+    result = write_file_result && bytes_written == buffer_size;
+    CloseHandle(file_handle);
+    return result;
+};
+
 void S86_Print(S86_Str8 string)
 {
     if (s86_globals.stdout_handle == NULL) {
