@@ -349,7 +349,6 @@ void S86_DecodeEffectiveAddr(S86_Opcode *opcode, S86_BufferIterator *buffer_it, 
 S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
                             S86_OpDecode const *decode_table,
                             uint16_t            decode_table_size,
-                            uint16_t            opcode_index,
                             bool               *lock_prefix,
                             S86_MnemonicOp     *seg_reg)
 {
@@ -845,8 +844,6 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
 
     size_t buffer_end_index = buffer_it->index;
     result.byte_size        = S86_CAST(uint8_t)(buffer_end_index - buffer_start_index);
-    result.instruction_ptr  = S86_CAST(uint16_t)buffer_start_index;
-    result.index            = S86_CAST(uint16_t)opcode_index;
     S86_ASSERT(result.immediate < S86_CAST(uint16_t)-1);
     return result;
 }
@@ -856,31 +853,6 @@ typedef struct S86_MnemonicOpToRegisterFileMap {
     S86_Register16   *reg;               ///< Pointer to the register memory this mnemonic op is using
     S86_RegisterByte  byte;              ///< The 'byte' that the mnemonic operates on (hi, lo or nil e.g. word)
 } S86_MnemonicOpToRegisterFileMap;
-
-S86_Opcode *S86_OpcodeAtInstructionPtr(S86_Opcode *opcode_array,
-                                       size_t opcode_size,
-                                       S86_Opcode *prev_opcode,
-                                       uint16_t instruction_ptr)
-{
-    S86_Opcode NIL_OPCODE = {0};
-    if (!prev_opcode)
-        prev_opcode = &NIL_OPCODE;
-
-    S86_Opcode *result = NULL;
-    if (instruction_ptr < prev_opcode->instruction_ptr) {
-        for (size_t index = prev_opcode->index - 1; !result && index < opcode_size; index--) {
-            if (opcode_array[index].instruction_ptr == instruction_ptr)
-                result = opcode_array + index;
-        }
-    } else {
-        for (size_t index = prev_opcode->index; !result && index < opcode_size; index++) {
-            if (opcode_array[index].instruction_ptr == instruction_ptr)
-                result = opcode_array + index;
-        }
-    }
-
-    return result;
-}
 
 char const CLI_ARG_EXEC[]                = "--exec";
 char const CLI_ARG_LOG_INSTRUCTION_PTR[] = "--log-instruction-ptr";
@@ -1237,6 +1209,7 @@ int main(int argc, char **argv)
 
     S86_RegisterFile register_file = {0};
     uint8_t *memory                = VirtualAlloc(0, 1024 * 1024, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    memcpy(memory, buffer.data, buffer.size);
 
     S86_MnemonicOpToRegisterFileMap mnemonic_op_to_register_file_map[] = {
         {.mnemonic_op = S86_MnemonicOp_AX,    .reg = &register_file.reg.file.ax, .byte = S86_RegisterByte_Nil},
@@ -1271,56 +1244,21 @@ int main(int argc, char **argv)
         {.mnemonic_op = S86_MnemonicOp_BP_DI, .reg = &register_file.reg.file.bp, .byte = S86_RegisterByte_Nil},
     };
 
-    // NOTE: Count opcodes, allocate then decode in 1 swoop
-    // =========================================================================
-    S86_Opcode *opcode_array = NULL;
-    uint16_t opcode_size       = 0;
-    {
-        bool           lock_prefix = false;
-        S86_MnemonicOp seg_reg     = S86_CAST(S86_MnemonicOp)0;
-        for (S86_BufferIterator it = S86_BufferIteratorInit(buffer);
-             S86_BufferIteratorHasMoreBytes(it);
-             opcode_size++) {
-            S86_DecodeOpcode(&it, DECODE_TABLE, S86_ARRAY_UCOUNT(DECODE_TABLE), opcode_size, &lock_prefix, &seg_reg);
-        }
-
-        if (opcode_size == 0)
-            return 0;
-
-        lock_prefix  = false;
-        seg_reg      = S86_CAST(S86_MnemonicOp)0;
-        opcode_array = VirtualAlloc(NULL, sizeof(*opcode_array) * opcode_size,  MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-        if (!opcode_array) {
-            S86_PrintLnFmt("ERROR: Failed to allocate memory for decoding opcode stream");
-            return -1;
-        }
-
-        uint16_t opcode_index = 0;
-        for (S86_BufferIterator it = S86_BufferIteratorInit(buffer); S86_BufferIteratorHasMoreBytes(it); opcode_index++) {
-            opcode_array[opcode_index] = S86_DecodeOpcode(&it, DECODE_TABLE, S86_ARRAY_UCOUNT(DECODE_TABLE), opcode_index, &lock_prefix, &seg_reg);
-        }
-    }
-
     // NOTE: Execute the assembly
     // =========================================================================
-    for (S86_Opcode *prev_opcode = NULL, *opcode = NULL;
-         register_file.instruction_ptr < buffer.size;
-         prev_opcode = opcode) {
-        opcode = S86_OpcodeAtInstructionPtr(opcode_array,
-                                            opcode_size,
-                                            prev_opcode,
-                                            register_file.instruction_ptr);
-        if (!opcode) {
-            S86_PrintLnFmt("ERROR: Could not find opcode with matching instruction pointer, execution failed! [file=\"%.*s\", prev_ip=0x%x, ip=0x%x]",
-                           S86_STR8_FMT(file_path),
-                           prev_opcode->instruction_ptr,
-                           register_file.instruction_ptr);
-            return -1;
-        }
+    bool lock_prefix       = false;
+    S86_MnemonicOp seg_reg = S86_CAST(S86_MnemonicOp)0;
+    for (uint16_t prev_ip = 0; register_file.instruction_ptr < buffer.size; prev_ip = register_file.instruction_ptr) {
+        S86_Buffer instruction_buffer = {0};
+        instruction_buffer.data       = (char *)&memory[register_file.instruction_ptr];
+        instruction_buffer.size       = buffer.size - register_file.instruction_ptr;
 
-        S86_PrintOpcode(*opcode);
-        register_file.instruction_ptr += opcode->byte_size;
-        if (opcode->mnemonic == S86_Mnemonic_LOCK || opcode->mnemonic == S86_Mnemonic_SEGMENT)
+        S86_BufferIterator instruction_it = S86_BufferIteratorInit(instruction_buffer);
+        S86_Opcode opcode                 = S86_DecodeOpcode(&instruction_it, DECODE_TABLE, S86_ARRAY_UCOUNT(DECODE_TABLE), &lock_prefix, &seg_reg);
+        S86_PrintOpcode(opcode);
+
+        register_file.instruction_ptr += opcode.byte_size;
+        if (opcode.mnemonic == S86_Mnemonic_LOCK || opcode.mnemonic == S86_Mnemonic_SEGMENT)
             continue;
 
         if (!exec_mode) {
@@ -1330,7 +1268,7 @@ int main(int argc, char **argv)
 
         // NOTE: Simulate instruction ==============================================================
         S86_RegisterFile prev_register_file = register_file;
-        switch (opcode->mnemonic) {
+        switch (opcode.mnemonic) {
             case S86_Mnemonic_PUSH:          /*FALLTHRU*/
             case S86_Mnemonic_POP:           /*FALLTHRU*/
             case S86_Mnemonic_XCHG:          /*FALLTHRU*/
@@ -1410,22 +1348,22 @@ int main(int argc, char **argv)
 
             case S86_Mnemonic_MOV: {
                 uint16_t src     = 0;
-                bool     byte_op = opcode->dest >= S86_MnemonicOp_AL && opcode->dest <= S86_MnemonicOp_BH;
-                if (opcode->src == S86_MnemonicOp_Immediate) {
+                bool     byte_op = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
+                if (opcode.src == S86_MnemonicOp_Immediate) {
                     if (byte_op) {
-                        S86_ASSERT(opcode->immediate < S86_CAST(uint8_t)-1);
-                        src = S86_CAST(uint8_t)opcode->immediate;
+                        S86_ASSERT(opcode.immediate < S86_CAST(uint8_t)-1);
+                        src = S86_CAST(uint8_t)opcode.immediate;
                     } else {
-                        src = S86_CAST(uint16_t)opcode->immediate;
+                        src = S86_CAST(uint16_t)opcode.immediate;
                     }
-                } else if (opcode->src == S86_MnemonicOp_DirectAddress) {
-                    S86_ASSERT(opcode->displacement >= 0);
-                    src = memory[opcode->displacement];
+                } else if (opcode.src == S86_MnemonicOp_DirectAddress) {
+                    S86_ASSERT(opcode.displacement >= 0);
+                    src = memory[opcode.displacement];
                 } else {
                     S86_MnemonicOpToRegisterFileMap const *src_map = NULL;
                     for (size_t index = 0; !src_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
                         S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
-                        if (item->mnemonic_op == opcode->src)
+                        if (item->mnemonic_op == opcode.src)
                             src_map = item;
                     }
 
@@ -1451,27 +1389,27 @@ int main(int argc, char **argv)
 
                 uint8_t *dest_lo = NULL;
                 uint8_t *dest_hi = NULL;
-                if (opcode->dest == S86_MnemonicOp_DirectAddress) {
+                if (opcode.dest == S86_MnemonicOp_DirectAddress) {
                     // NOTE: The 8086 doesn't support load to store directly 
                     // memory to memory afaict
-                    S86_ASSERT(opcode->dest != opcode->src);
-                    S86_ASSERT(opcode->displacement >= 0);
+                    S86_ASSERT(opcode.dest != opcode.src);
+                    S86_ASSERT(opcode.displacement >= 0);
 
-                    dest_lo = memory + opcode->displacement;
-                    dest_hi = byte_op ? NULL : memory + (opcode->displacement + 1);
+                    dest_lo = memory + opcode.displacement;
+                    dest_hi = byte_op ? NULL : memory + (opcode.displacement + 1);
                 } else {
                     S86_MnemonicOpToRegisterFileMap const *dest_map = NULL;
                     for (size_t index = 0; !dest_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
                         S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
-                        if (item->mnemonic_op == opcode->dest)
+                        if (item->mnemonic_op == opcode.dest)
                             dest_map = item;
                     }
                     S86_ASSERT(dest_map);
 
                     // NOTE: Effective address means we're store/load from memory
                     // The opcode value is the address.
-                    if (opcode->effective_addr == S86_EffectiveAddress_Dest && opcode->effective_addr_loads_mem) {
-                        uint16_t address = dest_map->reg->word + S86_CAST(uint16_t)opcode->displacement;
+                    if (opcode.effective_addr == S86_EffectiveAddress_Dest && opcode.effective_addr_loads_mem) {
+                        uint16_t address = dest_map->reg->word + S86_CAST(uint16_t)opcode.displacement;
                         if (dest_map->mnemonic_op == S86_MnemonicOp_BX_SI) {
                             address = dest_map->reg->word + register_file.reg.file.si.word;
                         } else if (dest_map->mnemonic_op == S86_MnemonicOp_BX_DI) {
@@ -1506,32 +1444,32 @@ int main(int argc, char **argv)
                 S86_MnemonicOpToRegisterFileMap *dest_map = NULL;
                 for (size_t index = 0; !dest_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
                     S86_MnemonicOpToRegisterFileMap *item = mnemonic_op_to_register_file_map + index;
-                    if (item->mnemonic_op == opcode->dest)
+                    if (item->mnemonic_op == opcode.dest)
                         dest_map = item;
                 }
                 S86_ASSERT(dest_map);
 
-                bool subtract       = opcode->mnemonic != S86_Mnemonic_ADD;
+                bool subtract       = opcode.mnemonic != S86_Mnemonic_ADD;
                 S86_Register16 dest = *dest_map->reg;
-                bool byte_op        = opcode->dest >= S86_MnemonicOp_AL && opcode->dest <= S86_MnemonicOp_BH;
+                bool byte_op        = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
 
                 uint16_t src = 0;
-                if (opcode->src == S86_MnemonicOp_Immediate) {
+                if (opcode.src == S86_MnemonicOp_Immediate) {
                     if (byte_op) {
-                        S86_ASSERT(opcode->immediate < S86_CAST(uint8_t)-1);
-                        src = S86_CAST(uint8_t)opcode->immediate;
+                        S86_ASSERT(opcode.immediate < S86_CAST(uint8_t)-1);
+                        src = S86_CAST(uint8_t)opcode.immediate;
                     } else {
-                        S86_ASSERT(opcode->immediate < S86_CAST(uint16_t)-1);
-                        src = S86_CAST(uint16_t)opcode->immediate;
+                        S86_ASSERT(opcode.immediate < S86_CAST(uint16_t)-1);
+                        src = S86_CAST(uint16_t)opcode.immediate;
                     }
-                } else if (opcode->src == S86_MnemonicOp_DirectAddress) {
-                    S86_ASSERT(opcode->displacement >= 0);
-                    src = memory[opcode->displacement];
+                } else if (opcode.src == S86_MnemonicOp_DirectAddress) {
+                    S86_ASSERT(opcode.displacement >= 0);
+                    src = memory[opcode.displacement];
                 } else {
                     S86_MnemonicOpToRegisterFileMap const *src_map = NULL;
                     for (size_t index = 0; !src_map && index < S86_ARRAY_UCOUNT(mnemonic_op_to_register_file_map); index++) {
                         S86_MnemonicOpToRegisterFileMap const *item = mnemonic_op_to_register_file_map + index;
-                        if (item->mnemonic_op == opcode->src)
+                        if (item->mnemonic_op == opcode.src)
                             src_map = item;
                     }
 
@@ -1621,34 +1559,34 @@ int main(int argc, char **argv)
                 int lo_bit_count           = _mm_popcnt_u32(S86_CAST(uint32_t)dest.bytes[S86_RegisterByte_Lo]);
                 register_file.flags.parity = lo_bit_count % 2 == 0;
                 register_file.flags.zero   = byte_op ? dest.bytes[dest_map->byte] == 0 : dest.word == 0;
-                if (opcode->mnemonic != S86_Mnemonic_CMP)
+                if (opcode.mnemonic != S86_Mnemonic_CMP)
                     *dest_map->reg = dest;
             } break;
 
             case S86_Mnemonic_JNE_JNZ: {
                 if (!register_file.flags.zero)
-                    register_file.instruction_ptr += S86_CAST(int16_t)opcode->displacement;
+                    register_file.instruction_ptr += S86_CAST(int16_t)opcode.displacement;
             } break;
 
             case S86_Mnemonic_JE_JZ: {
                 if (register_file.flags.zero)
-                    register_file.instruction_ptr += S86_CAST(int16_t)opcode->displacement;
+                    register_file.instruction_ptr += S86_CAST(int16_t)opcode.displacement;
             } break;
 
             case S86_Mnemonic_JP_JPE: {
                 if (register_file.flags.parity)
-                    register_file.instruction_ptr += S86_CAST(int16_t)opcode->displacement;
+                    register_file.instruction_ptr += S86_CAST(int16_t)opcode.displacement;
             } break;
 
             case S86_Mnemonic_JB_JNAE: {
                 if (register_file.flags.carry)
-                    register_file.instruction_ptr += S86_CAST(int16_t)opcode->displacement;
+                    register_file.instruction_ptr += S86_CAST(int16_t)opcode.displacement;
             } break;
 
             case S86_Mnemonic_LOOPNZ_LOOPNE: {
                 register_file.reg.file.cx.word -= 1;
                 if (register_file.reg.file.cx.word != 0 && !register_file.flags.zero)
-                    register_file.instruction_ptr += S86_CAST(int16_t)opcode->displacement;
+                    register_file.instruction_ptr += S86_CAST(int16_t)opcode.displacement;
             } break;
         }
 
@@ -1673,7 +1611,7 @@ int main(int argc, char **argv)
 
         // NOTE: Instruction Pointer
         if (log_instruction_ptr)
-            S86_PrintFmt("ip:0x%x->0x%x ", opcode->instruction_ptr, register_file.instruction_ptr);
+            S86_PrintFmt("ip:0x%x->0x%x ", prev_ip, register_file.instruction_ptr);
 
         // NOTE: Flags
         if (!S86_RegisterFileFlagsEq(register_file.flags, prev_register_file.flags)) {
