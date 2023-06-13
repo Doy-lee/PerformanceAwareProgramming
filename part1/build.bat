@@ -269,3 +269,20 @@ nasm %build_dir_listing_0055%_disassembled.asm
 
 fc /B %build_dir_listing_0055%     %build_dir_listing_0055%_disassembled     || exit /b 1
 fc /N %build_dir_listing_0055%.txt %build_dir_listing_0055%_disassembled.txt || exit /b 1
+
+REM ================================================================================================
+set listing_0056=listing_0056_estimating_cycles
+set build_dir_listing_0056=%build_dir%\%listing_0056%
+
+copy /Y %script_dir%\%listing_0056% %build_dir% 1>NUL
+copy /Y %script_dir%\%listing_0056%.txt %build_dir% 1>NUL
+
+pushd %build_dir%
+%build_dir%\sim8086.exe --exec --log-instruction-ptr --log-cycle-counts --dump %build_dir_listing_0056% > %build_dir_listing_0056%_disassembled.txt
+%build_dir%\sim8086.exe                                                        %build_dir_listing_0056% > %build_dir_listing_0056%_disassembled.asm
+popd
+
+nasm %build_dir_listing_0056%_disassembled.asm
+
+fc /B %build_dir_listing_0056%     %build_dir_listing_0056%_disassembled     || exit /b 1
+fc /N %build_dir_listing_0056%.txt %build_dir_listing_0056%_disassembled.txt || exit /b 1

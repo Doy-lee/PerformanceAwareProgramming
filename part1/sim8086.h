@@ -307,6 +307,7 @@ typedef enum S86_MnemonicOp {
 
     S86_MnemonicOp_DirectInterSegment,
     S86_MnemonicOp_Jump,
+    S86_MnemonicOp_Count,
 } S86_MnemonicOp;
 
 typedef enum S86_EffectiveAddress {
@@ -336,6 +337,7 @@ typedef struct S86_Opcode {
     int32_t              immediate;                ///< Immediate value when src/dest op is an immediate
     bool                 immediate_is_8bit;        ///< Immediate was 8bit and sign extended
     S86_MnemonicOp       seg_reg_prefix;           ///< Segment register that should prefix the upcoming instruction
+    uint32_t             clocks;                   ///< Number of cycles required to complete this operation
 } S86_Opcode;
 
 typedef enum S86_RegisterByte {
@@ -407,6 +409,8 @@ S86_Str8       S86_MnemonicStr8            (S86_Mnemonic type);
 S86_MnemonicOp S86_MnemonicOpFromWReg      (bool w, uint8_t reg);
 S86_MnemonicOp S86_MnemonicOpFromSR        (uint8_t sr);
 S86_Str8       S86_MnemonicOpStr8          (S86_MnemonicOp type);
+bool           S86_MnemonicOpIsAccumulator (S86_MnemonicOp type);
+bool           S86_MnemonicOpIsRegister    (S86_MnemonicOp type);
 S86_Str8       S86_RegisterFileRegArrayStr8(S86_RegisterFileRegArray type);
 void           S86_PrintOpcodeMnemonicOp   (S86_Opcode opcode, bool src);
 void           S86_PrintOpcode             (S86_Opcode opcode);

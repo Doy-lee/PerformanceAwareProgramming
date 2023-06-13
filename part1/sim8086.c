@@ -196,6 +196,21 @@ S86_Str8 S86_MnemonicOpStr8(S86_MnemonicOp type)
     return result;
 }
 
+bool S86_MnemonicOpIsAccumulator(S86_MnemonicOp type)
+{
+    bool result = type == S86_MnemonicOp_AX ||
+                  type == S86_MnemonicOp_AL ||
+                  type == S86_MnemonicOp_AH;
+    return result;
+}
+
+bool S86_MnemonicOpIsRegister(S86_MnemonicOp type)
+{
+    bool result = (type >= S86_MnemonicOp_AL && type <= S86_MnemonicOp_DI) ||
+                  (type >= S86_MnemonicOp_ES && type <= S86_MnemonicOp_DS);
+    return result;
+}
+
 S86_Str8 S86_RegisterFileRegArrayStr8(S86_RegisterFileRegArray type)
 {
     S86_Str8 result = {0};
@@ -398,10 +413,11 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
     S86_ASSERT(op_code_size > 0 && op_code_size <= S86_ARRAY_UCOUNT(op_code_bytes));
     S86_ASSERT(op_decode_type != S86_OpDecodeType_Count && "Unknown instruction");
 
-    S86_Opcode result     = {0};
-    result.mnemonic       = op_decode->mnemonic;
-    result.lock_prefix    = *lock_prefix;
-    result.seg_reg_prefix = *seg_reg;
+    S86_Opcode result      = {0};
+    result.mnemonic        = op_decode->mnemonic;
+    result.lock_prefix     = *lock_prefix;
+    result.seg_reg_prefix  = *seg_reg;
+
     S86_ASSERT(*seg_reg == S86_MnemonicOp_Invalid || (*seg_reg >= S86_MnemonicOp_ES && *seg_reg <= S86_MnemonicOp_DS));
     switch (op_decode_type) {
         // NOTE: Instruction Pattern => [0b0000'0000W | 0bAA00'0CCC | DISP-LO | DISP-HI]
@@ -836,6 +852,26 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
             : S86_WordBytePrefix_Byte;
     }
 
+    if ((op_decode_type >= S86_OpDecodeType_MOVRegOrMemToOrFromReg) &&
+        (op_decode_type <= S86_OpDecodeType_MOVSegRegToRegOrMem)) {
+        if (result.src == S86_MnemonicOp_DirectAddress &&
+            S86_MnemonicOpIsAccumulator(result.dest)) {
+            result.clocks = 4;
+        } else if (S86_MnemonicOpIsAccumulator(result.src) &&
+                   result.dest == S86_MnemonicOp_DirectAddress) {
+            result.clocks = 4;
+        } else if (S86_MnemonicOpIsRegister(result.src) &&
+                   S86_MnemonicOpIsRegister(result.dest)) {
+            result.clocks = 2;
+        } else if (result.src == S86_MnemonicOp_DirectAddress &&
+                   S86_MnemonicOpIsRegister(result.dest)) {
+            result.clocks = 2;
+        } else if (result.src == S86_MnemonicOp_Immediate &&
+                   S86_MnemonicOpIsRegister(result.dest)) {
+            result.clocks = 4;
+        }
+    }
+
     size_t buffer_end_index = buffer_it->index;
     result.byte_size        = S86_CAST(uint8_t)(buffer_end_index - buffer_start_index);
     S86_ASSERT(result.immediate < S86_CAST(uint16_t)-1);
@@ -850,6 +886,7 @@ typedef struct S86_MnemonicOpToRegisterFileMap {
 
 char const CLI_ARG_EXEC[]                = "--exec";
 char const CLI_ARG_LOG_INSTRUCTION_PTR[] = "--log-instruction-ptr";
+char const CLI_ARG_LOG_CYCLE_COUNTS[]    = "--log-cycle-counts";
 char const CLI_ARG_DUMP[]                = "--dump";
 #define PRINT_USAGE                                                      \
     S86_PrintLnFmt("USAGE: sim8086.exe [%.*s] [%.*s] <binary asm file>", \
@@ -868,12 +905,14 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    S86_Str8 CLI_ARG_EXEC_STR8                = (S86_Str8){(char *)CLI_ARG_EXEC, S86_ARRAY_UCOUNT(CLI_ARG_EXEC) - 1};
+    S86_Str8 CLI_ARG_EXEC_STR8                = (S86_Str8){(char *)CLI_ARG_EXEC,                S86_ARRAY_UCOUNT(CLI_ARG_EXEC)                - 1};
     S86_Str8 CLI_ARG_LOG_INSTRUCTION_PTR_STR8 = (S86_Str8){(char *)CLI_ARG_LOG_INSTRUCTION_PTR, S86_ARRAY_UCOUNT(CLI_ARG_LOG_INSTRUCTION_PTR) - 1};
-    S86_Str8 CLI_ARG_DUMP_STR8                = (S86_Str8){(char *)CLI_ARG_DUMP, S86_ARRAY_UCOUNT(CLI_ARG_DUMP) - 1};
+    S86_Str8 CLI_ARG_LOG_CYCLE_COUNTS_STR8    = (S86_Str8){(char *)CLI_ARG_LOG_CYCLE_COUNTS,    S86_ARRAY_UCOUNT(CLI_ARG_LOG_CYCLE_COUNTS)    - 1};
+    S86_Str8 CLI_ARG_DUMP_STR8                = (S86_Str8){(char *)CLI_ARG_DUMP,                S86_ARRAY_UCOUNT(CLI_ARG_DUMP)                - 1};
 
     bool exec_mode           = false;
     bool log_instruction_ptr = false;
+    bool log_cycle_counts    = false;
     bool dump                = false;
     S86_Str8 file_path       = {0};
     for (int arg_index = 1; arg_index < argc; arg_index++) {
@@ -883,6 +922,8 @@ int main(int argc, char **argv)
             exec_mode = true;
         } else if (S86_Str8_Equals(arg_str8, CLI_ARG_LOG_INSTRUCTION_PTR_STR8)) {
             log_instruction_ptr = true;
+        } else if (S86_Str8_Equals(arg_str8, CLI_ARG_LOG_CYCLE_COUNTS_STR8)) {
+            log_cycle_counts = true;
         } else if (S86_Str8_Equals(arg_str8, CLI_ARG_DUMP_STR8)) {
             dump = true;
         } else {
@@ -1203,10 +1244,21 @@ int main(int argc, char **argv)
 
     // NOTE: Decode assembly
     // =========================================================================
-    if (exec_mode)
+    if (exec_mode) {
+        if (log_cycle_counts) { // NOTE: Print disclaimer + header
+            S86_PrintLn(S86_STR8("**************"));
+            S86_PrintLn(S86_STR8("**** 8086 ****"));
+            S86_PrintLn(S86_STR8("**************"));
+            S86_PrintLn(S86_STR8(""));
+            S86_PrintLn(S86_STR8("WARNING: Clocks reported by this utility are strictly from the 8086 manual."));
+            S86_PrintLn(S86_STR8("They will be inaccurate, both because the manual clocks are estimates, and because"));
+            S86_PrintLn(S86_STR8("some of the entries in the manual look highly suspicious and are probably typos."));
+            S86_PrintLn(S86_STR8(""));
+        }
         S86_PrintLnFmt("--- test\\%s execution ---", file_name);
-    else
+    } else {
         S86_PrintLn(S86_STR8("bits 16"));
+    }
 
     uint32_t const S86_MEMORY_SIZE = 1024 * 1024;
     S86_RegisterFile register_file = {0};
@@ -1252,6 +1304,7 @@ int main(int argc, char **argv)
     instruction_buffer.data           = (char *)&memory[register_file.instruction_ptr];
     instruction_buffer.size           = buffer.size;
     S86_BufferIterator instruction_it = S86_BufferIteratorInit(instruction_buffer);
+    uint32_t clocks_counter           = 0;
 
     bool lock_prefix       = false;
     S86_MnemonicOp seg_reg = S86_CAST(S86_MnemonicOp)0;
@@ -1597,9 +1650,15 @@ int main(int argc, char **argv)
                     register_file.instruction_ptr += S86_CAST(int16_t)opcode.displacement;
             } break;
         }
+        clocks_counter += opcode.clocks;
 
         // NOTE: Printing ==========================================================================
         S86_PrintFmt(" ; ");
+
+        // NOTE: Clocks
+        if (log_cycle_counts) {
+            S86_PrintFmt("Clocks: +%u = %u |", opcode.clocks, clocks_counter);
+        }
 
         // NOTE: Registers
         for (size_t index = 0; index < S86_RegisterFileRegArray_Count; index++) {
