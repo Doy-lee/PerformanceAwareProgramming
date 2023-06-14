@@ -869,12 +869,21 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
         } else if (S86_MnemonicOpIsRegister(result.dest) && result.src == S86_MnemonicOp_DirectAddress && result.effective_addr_loads_mem && result.effective_addr == S86_EffectiveAddress_Src) {
             result.base_clocks              = 8;
             result.effective_address_clocks = 6;
+            if (cycle_count_8088 && result.wide) {
+                result.transfer_penalty_clocks = 4;
+            }
         } else if (S86_MnemonicOpIsRegister(result.dest) && S86_MnemonicOpIsRegister(result.src) && result.effective_addr_loads_mem && result.effective_addr == S86_EffectiveAddress_Src) {
             result.base_clocks              = 8;
             result.effective_address_clocks = result.displacement ? 9 : 5;
+            if (cycle_count_8088 && result.wide) {
+                result.transfer_penalty_clocks = 4;
+            }
         } else if (S86_MnemonicOpIsRegister(result.dest) && S86_MnemonicOpIsRegister(result.src) && result.effective_addr_loads_mem && result.effective_addr == S86_EffectiveAddress_Dest) {
             result.base_clocks              = 9;
             result.effective_address_clocks = result.displacement ? 9 : 5;
+            if (cycle_count_8088 && result.wide) {
+                result.transfer_penalty_clocks = 4;
+            }
         }
     } else if (op_decode_type >= S86_OpDecodeType_ADDRegOrMemToOrFromReg && op_decode_type <= S86_OpDecodeType_ADDImmediateToAccum) {
         if (S86_MnemonicOpIsRegister(result.dest) && S86_MnemonicOpIsRegister(result.src) && result.effective_addr == S86_EffectiveAddress_None) {
@@ -882,12 +891,13 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
         } else if (S86_MnemonicOpIsRegister(result.dest) && S86_MnemonicOpIsRegister(result.src) && result.effective_addr == S86_EffectiveAddress_Dest) {
             result.base_clocks              = 16;
             result.effective_address_clocks = result.displacement ? 9 : 5;
+            if (cycle_count_8088 && result.wide) {
+                result.transfer_penalty_clocks = 4 * 2;
+            }
         } else if (S86_MnemonicOpIsRegister(result.dest) && result.src == S86_MnemonicOp_Immediate) {
             result.base_clocks = 4;
         }
     }
-
-    (void)cycle_count_8088;
 
     size_t buffer_end_index = buffer_it->index;
     result.byte_size        = S86_CAST(uint8_t)(buffer_end_index - buffer_start_index);
@@ -1729,16 +1739,21 @@ int main(int argc, char **argv)
                     register_file.instruction_ptr += S86_CAST(int16_t)opcode.displacement;
             } break;
         }
-        clocks_counter += opcode.base_clocks + opcode.effective_address_clocks;
+        clocks_counter += opcode.base_clocks + opcode.effective_address_clocks + opcode.transfer_penalty_clocks;
 
         // NOTE: Printing ==========================================================================
         S86_PrintFmt(" ; ");
 
         // NOTE: Clocks
         if (log_cycle_counts) {
-            S86_PrintFmt("Clocks: +%u = %u", opcode.base_clocks + opcode.effective_address_clocks, clocks_counter);
-            if (opcode.effective_address_clocks) {
-                S86_PrintFmt(" (%u + %uea)", opcode.base_clocks, opcode.effective_address_clocks);
+            S86_PrintFmt("Clocks: +%u = %u", opcode.base_clocks + opcode.effective_address_clocks + opcode.transfer_penalty_clocks, clocks_counter);
+            if (opcode.effective_address_clocks || opcode.transfer_penalty_clocks) {
+                S86_PrintFmt(" (%u", opcode.base_clocks);
+                if (opcode.effective_address_clocks)
+                    S86_PrintFmt(" + %uea", opcode.effective_address_clocks);
+                if (opcode.transfer_penalty_clocks)
+                    S86_PrintFmt(" + %up", opcode.transfer_penalty_clocks);
+                S86_PrintFmt(")");
             }
             S86_PrintFmt(" | ");
         }

@@ -278,9 +278,9 @@ copy /Y %script_dir%\%listing_0056% %build_dir% 1>NUL
 copy /Y %script_dir%\%listing_0056%.txt %build_dir% 1>NUL
 
 pushd %build_dir%
-%build_dir%\sim8086.exe --exec --log-instruction-ptr --log-cycle-counts 8086 --dump %build_dir_listing_0056%  > %build_dir_listing_0056%_disassembled.txt
-%build_dir%\sim8086.exe                                                             %build_dir_listing_0056%  > %build_dir_listing_0056%_disassembled.asm
-%build_dir%\sim8086.exe --exec --log-instruction-ptr --log-cycle-counts 8088 --dump %build_dir_listing_0056% >> %build_dir_listing_0056%_disassembled.txt
+%build_dir%\sim8086.exe --exec --log-instruction-ptr --log-cycle-counts 8086 %build_dir_listing_0056%  > %build_dir_listing_0056%_disassembled.txt
+%build_dir%\sim8086.exe                                                      %build_dir_listing_0056%  > %build_dir_listing_0056%_disassembled.asm
+%build_dir%\sim8086.exe --exec --log-instruction-ptr --log-cycle-counts 8088 %build_dir_listing_0056% >> %build_dir_listing_0056%_disassembled.txt
 popd
 
 nasm %build_dir_listing_0056%_disassembled.asm
