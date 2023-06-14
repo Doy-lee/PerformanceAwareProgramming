@@ -337,7 +337,9 @@ typedef struct S86_Opcode {
     int32_t              immediate;                ///< Immediate value when src/dest op is an immediate
     bool                 immediate_is_8bit;        ///< Immediate was 8bit and sign extended
     S86_MnemonicOp       seg_reg_prefix;           ///< Segment register that should prefix the upcoming instruction
-    uint32_t             clocks;                   ///< Number of cycles required to complete this operation
+    uint32_t             base_clocks;              ///< Number of cycles required to complete this operation
+    uint32_t             effective_address_clocks; ///< Number of cycles required to complete this operation
+    uint32_t             transfer_penalty_clocks;  ///< Number of extra cycles required to complete a word transfer
 } S86_Opcode;
 
 typedef enum S86_RegisterByte {

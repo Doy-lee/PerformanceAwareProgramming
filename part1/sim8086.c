@@ -211,6 +211,13 @@ bool S86_MnemonicOpIsRegister(S86_MnemonicOp type)
     return result;
 }
 
+bool S86_MnemonicOpIsEffectiveAddress(S86_MnemonicOp type)
+{
+    bool result = (type >= S86_MnemonicOp_BX_SI && type <= S86_MnemonicOp_BP_DI) ||
+                  (type == S86_MnemonicOp_DirectAddress);
+    return result;
+}
+
 S86_Str8 S86_RegisterFileRegArrayStr8(S86_RegisterFileRegArray type)
 {
     S86_Str8 result = {0};
@@ -365,7 +372,8 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
                             S86_OpDecode const *decode_table,
                             uint16_t            decode_table_size,
                             bool               *lock_prefix,
-                            S86_MnemonicOp     *seg_reg)
+                            S86_MnemonicOp     *seg_reg,
+                            bool                cycle_count_8088)
 {
     size_t buffer_start_index     = buffer_it->index;
     char op_code_bytes[2]         = {0};
@@ -854,23 +862,32 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
 
     if ((op_decode_type >= S86_OpDecodeType_MOVRegOrMemToOrFromReg) &&
         (op_decode_type <= S86_OpDecodeType_MOVSegRegToRegOrMem)) {
-        if (result.src == S86_MnemonicOp_DirectAddress &&
-            S86_MnemonicOpIsAccumulator(result.dest)) {
-            result.clocks = 4;
-        } else if (S86_MnemonicOpIsAccumulator(result.src) &&
-                   result.dest == S86_MnemonicOp_DirectAddress) {
-            result.clocks = 4;
-        } else if (S86_MnemonicOpIsRegister(result.src) &&
-                   S86_MnemonicOpIsRegister(result.dest)) {
-            result.clocks = 2;
-        } else if (result.src == S86_MnemonicOp_DirectAddress &&
-                   S86_MnemonicOpIsRegister(result.dest)) {
-            result.clocks = 2;
-        } else if (result.src == S86_MnemonicOp_Immediate &&
-                   S86_MnemonicOpIsRegister(result.dest)) {
-            result.clocks = 4;
+        if (S86_MnemonicOpIsRegister(result.dest) && result.src == S86_MnemonicOp_Immediate && !result.effective_addr_loads_mem) {
+            result.base_clocks = 4;
+        } else if (S86_MnemonicOpIsRegister(result.dest) && S86_MnemonicOpIsRegister(result.src) && !result.effective_addr_loads_mem) {
+            result.base_clocks = 2;
+        } else if (S86_MnemonicOpIsRegister(result.dest) && result.src == S86_MnemonicOp_DirectAddress && result.effective_addr_loads_mem && result.effective_addr == S86_EffectiveAddress_Src) {
+            result.base_clocks              = 8;
+            result.effective_address_clocks = 6;
+        } else if (S86_MnemonicOpIsRegister(result.dest) && S86_MnemonicOpIsRegister(result.src) && result.effective_addr_loads_mem && result.effective_addr == S86_EffectiveAddress_Src) {
+            result.base_clocks              = 8;
+            result.effective_address_clocks = result.displacement ? 9 : 5;
+        } else if (S86_MnemonicOpIsRegister(result.dest) && S86_MnemonicOpIsRegister(result.src) && result.effective_addr_loads_mem && result.effective_addr == S86_EffectiveAddress_Dest) {
+            result.base_clocks              = 9;
+            result.effective_address_clocks = result.displacement ? 9 : 5;
+        }
+    } else if (op_decode_type >= S86_OpDecodeType_ADDRegOrMemToOrFromReg && op_decode_type <= S86_OpDecodeType_ADDImmediateToAccum) {
+        if (S86_MnemonicOpIsRegister(result.dest) && S86_MnemonicOpIsRegister(result.src) && result.effective_addr == S86_EffectiveAddress_None) {
+            result.base_clocks = 3;
+        } else if (S86_MnemonicOpIsRegister(result.dest) && S86_MnemonicOpIsRegister(result.src) && result.effective_addr == S86_EffectiveAddress_Dest) {
+            result.base_clocks              = 16;
+            result.effective_address_clocks = result.displacement ? 9 : 5;
+        } else if (S86_MnemonicOpIsRegister(result.dest) && result.src == S86_MnemonicOp_Immediate) {
+            result.base_clocks = 4;
         }
     }
+
+    (void)cycle_count_8088;
 
     size_t buffer_end_index = buffer_it->index;
     result.byte_size        = S86_CAST(uint8_t)(buffer_end_index - buffer_start_index);
@@ -888,14 +905,17 @@ char const CLI_ARG_EXEC[]                = "--exec";
 char const CLI_ARG_LOG_INSTRUCTION_PTR[] = "--log-instruction-ptr";
 char const CLI_ARG_LOG_CYCLE_COUNTS[]    = "--log-cycle-counts";
 char const CLI_ARG_DUMP[]                = "--dump";
-#define PRINT_USAGE                                                      \
-    S86_PrintLnFmt("USAGE: sim8086.exe [%.*s] [%.*s] <binary asm file>", \
-                   S86_ARRAY_UCOUNT(CLI_ARG_EXEC) - 1,                   \
-                   CLI_ARG_EXEC,                                         \
-                   S86_ARRAY_UCOUNT(CLI_ARG_LOG_INSTRUCTION_PTR) - 1,    \
-                   CLI_ARG_LOG_INSTRUCTION_PTR,                          \
-                   S86_ARRAY_UCOUNT(CLI_ARG_DUMP) - 1,                   \
+#define PRINT_USAGE                                                                    \
+    S86_PrintLnFmt("USAGE: sim8086.exe [%.*s] [%.*s] [%.*s] [%.*s <8086|8088>] <binary asm file>", \
+                   S86_ARRAY_UCOUNT(CLI_ARG_EXEC) - 1,                                 \
+                   CLI_ARG_EXEC,                                                       \
+                   S86_ARRAY_UCOUNT(CLI_ARG_LOG_INSTRUCTION_PTR) - 1,                  \
+                   CLI_ARG_LOG_INSTRUCTION_PTR,                                        \
+                   S86_ARRAY_UCOUNT(CLI_ARG_LOG_CYCLE_COUNTS) - 1,                     \
+                   CLI_ARG_LOG_CYCLE_COUNTS,                                           \
+                   S86_ARRAY_UCOUNT(CLI_ARG_DUMP) - 1,                                 \
                    CLI_ARG_DUMP)
+
 int main(int argc, char **argv)
 {
     // NOTE: Argument handling
@@ -910,20 +930,40 @@ int main(int argc, char **argv)
     S86_Str8 CLI_ARG_LOG_CYCLE_COUNTS_STR8    = (S86_Str8){(char *)CLI_ARG_LOG_CYCLE_COUNTS,    S86_ARRAY_UCOUNT(CLI_ARG_LOG_CYCLE_COUNTS)    - 1};
     S86_Str8 CLI_ARG_DUMP_STR8                = (S86_Str8){(char *)CLI_ARG_DUMP,                S86_ARRAY_UCOUNT(CLI_ARG_DUMP)                - 1};
 
-    bool exec_mode           = false;
-    bool log_instruction_ptr = false;
-    bool log_cycle_counts    = false;
-    bool dump                = false;
-    S86_Str8 file_path       = {0};
+    typedef enum CycleCount {
+        CycleCount_None,
+        CycleCount_8086,
+        CycleCount_8088,
+    } CycleCount;
+
+    CycleCount log_cycle_counts = CycleCount_None;
+    bool exec_mode              = false;
+    bool log_instruction_ptr    = false;
+    bool dump                   = false;
+    S86_Str8 file_path          = {0};
     for (int arg_index = 1; arg_index < argc; arg_index++) {
+
         char const *arg_cstring = argv[arg_index];
         S86_Str8 arg_str8       = (S86_Str8){(char *)arg_cstring, strlen(arg_cstring)};
+        S86_Str8 next_arg_str8  = S86_STR8("");
+        if ((arg_index + 1) < argc)
+            next_arg_str8 = (S86_Str8){(char *)argv[arg_index + 1], strlen(argv[arg_index + 1])};
+
         if (S86_Str8_Equals(arg_str8, CLI_ARG_EXEC_STR8)) {
             exec_mode = true;
         } else if (S86_Str8_Equals(arg_str8, CLI_ARG_LOG_INSTRUCTION_PTR_STR8)) {
             log_instruction_ptr = true;
         } else if (S86_Str8_Equals(arg_str8, CLI_ARG_LOG_CYCLE_COUNTS_STR8)) {
-            log_cycle_counts = true;
+            if (S86_Str8_Equals(next_arg_str8, S86_STR8("8086"))) {
+                log_cycle_counts = CycleCount_8086;
+            } else if (S86_Str8_Equals(next_arg_str8, S86_STR8("8088"))) {
+                log_cycle_counts = CycleCount_8088;
+            } else {
+                S86_PrintLnFmt("ERROR: Only '8086' or '8088' is accepted after the cycle count argument [arg=\"%.*s\"]", S86_STR8_FMT(next_arg_str8));
+                PRINT_USAGE;
+                return -1;
+            }
+            arg_index++;
         } else if (S86_Str8_Equals(arg_str8, CLI_ARG_DUMP_STR8)) {
             dump = true;
         } else {
@@ -1245,9 +1285,9 @@ int main(int argc, char **argv)
     // NOTE: Decode assembly
     // =========================================================================
     if (exec_mode) {
-        if (log_cycle_counts) { // NOTE: Print disclaimer + header
+        if (log_cycle_counts != CycleCount_None) { // NOTE: Print disclaimer + header
             S86_PrintLn(S86_STR8("**************"));
-            S86_PrintLn(S86_STR8("**** 8086 ****"));
+            S86_PrintLnFmt("**** %s ****", log_cycle_counts == CycleCount_8086 ? "8086" : "8088");
             S86_PrintLn(S86_STR8("**************"));
             S86_PrintLn(S86_STR8(""));
             S86_PrintLn(S86_STR8("WARNING: Clocks reported by this utility are strictly from the 8086 manual."));
@@ -1310,7 +1350,7 @@ int main(int argc, char **argv)
     S86_MnemonicOp seg_reg = S86_CAST(S86_MnemonicOp)0;
     for (uint16_t prev_ip = 0; register_file.instruction_ptr < buffer.size; prev_ip = register_file.instruction_ptr) {
         instruction_it.index = register_file.instruction_ptr;
-        S86_Opcode opcode    = S86_DecodeOpcode(&instruction_it, DECODE_TABLE, S86_ARRAY_UCOUNT(DECODE_TABLE), &lock_prefix, &seg_reg);
+        S86_Opcode opcode    = S86_DecodeOpcode(&instruction_it, DECODE_TABLE, S86_ARRAY_UCOUNT(DECODE_TABLE), &lock_prefix, &seg_reg, log_cycle_counts == CycleCount_8088);
         S86_PrintOpcode(opcode);
 
         register_file.instruction_ptr += opcode.byte_size;
@@ -1422,8 +1462,8 @@ int main(int argc, char **argv)
                             src_map = item;
                     }
 
-                    if (src_map->mnemonic_op >= S86_MnemonicOp_BX_SI &&
-                        src_map->mnemonic_op <= S86_MnemonicOp_BP_DI) {
+                    if ((src_map->mnemonic_op >= S86_MnemonicOp_BX_SI &&
+                        src_map->mnemonic_op <= S86_MnemonicOp_BP_DI) || opcode.effective_addr == S86_EffectiveAddress_Src) {
                         uint16_t address = 0;
                         if (src_map->mnemonic_op == S86_MnemonicOp_BX_SI) {
                             address = src_map->reg->word + register_file.reg.file.si.word;
@@ -1433,6 +1473,8 @@ int main(int argc, char **argv)
                             address = src_map->reg->word + register_file.reg.file.si.word;
                         } else if (src_map->mnemonic_op == S86_MnemonicOp_BP_DI) {
                             address = src_map->reg->word + register_file.reg.file.di.word;
+                        } else if (opcode.effective_addr == S86_EffectiveAddress_Src) {
+                            address = src_map->reg->word;
                         } else {
                             S86_ASSERT(!"Invalid code path");
                         }
@@ -1505,7 +1547,6 @@ int main(int argc, char **argv)
                 S86_ASSERT(dest_map);
 
                 bool subtract       = opcode.mnemonic != S86_Mnemonic_ADD;
-                S86_Register16 dest = *dest_map->reg;
                 bool byte_op        = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
 
                 uint16_t src = 0;
@@ -1528,8 +1569,8 @@ int main(int argc, char **argv)
                             src_map = item;
                     }
 
-                    if (src_map->mnemonic_op >= S86_MnemonicOp_BX_SI &&
-                        src_map->mnemonic_op <= S86_MnemonicOp_BP_DI) {
+                    if ((src_map->mnemonic_op >= S86_MnemonicOp_BX_SI &&
+                        src_map->mnemonic_op <= S86_MnemonicOp_BP_DI) || (opcode.effective_addr == S86_EffectiveAddress_Src && opcode.effective_addr_loads_mem)) {
                         uint16_t address = 0;
                         if (src_map->mnemonic_op == S86_MnemonicOp_BX_SI) {
                             address = src_map->reg->word + register_file.reg.file.si.word;
@@ -1539,6 +1580,8 @@ int main(int argc, char **argv)
                             address = src_map->reg->word + register_file.reg.file.si.word;
                         } else if (src_map->mnemonic_op == S86_MnemonicOp_BP_DI) {
                             address = src_map->reg->word + register_file.reg.file.di.word;
+                        } else if (opcode.effective_addr == S86_EffectiveAddress_Src) {
+                            address = src_map->reg->word;
                         } else {
                             S86_ASSERT(!"Invalid code path");
                         }
@@ -1552,12 +1595,48 @@ int main(int argc, char **argv)
                 // but, after the operation the sign masked changed.
                 uint8_t  const sign_mask8  = 0b1000'0000;
                 uint16_t const sign_mask16 = 0b1000'0000'0000'0000;
+
+                // NOTE: Effective address means we're store/load from memory
+                // The opcode value is the address.
+                S86_Register16 dummy_register = {0};
+                uint8_t *dest_lo = NULL;
+                uint8_t *dest_hi = NULL;
+                if (opcode.effective_addr == S86_EffectiveAddress_Dest && opcode.effective_addr_loads_mem) {
+                    uint16_t address = dest_map->reg->word;
+                    if (dest_map->mnemonic_op == S86_MnemonicOp_BX_SI) {
+                        address = dest_map->reg->word + register_file.reg.file.si.word;
+                    } else if (dest_map->mnemonic_op == S86_MnemonicOp_BX_DI) {
+                        address = dest_map->reg->word + register_file.reg.file.di.word;
+                    } else if (dest_map->mnemonic_op == S86_MnemonicOp_BP_SI) {
+                        address = dest_map->reg->word + register_file.reg.file.si.word;
+                    } else if (dest_map->mnemonic_op == S86_MnemonicOp_BP_DI) {
+                        address = dest_map->reg->word + register_file.reg.file.di.word;
+                    }
+                    dest_lo = memory + address;
+                    dest_hi = byte_op ? NULL : memory + (address + 1);
+
+                } else {
+                    if (byte_op) {
+                        dest_lo = &dest_map->reg->bytes[dest_map->byte];
+                    } else {
+                        dest_lo = &dest_map->reg->bytes[0];
+                        dest_hi = &dest_map->reg->bytes[1];
+                    }
+                }
+
+                if (opcode.mnemonic == S86_Mnemonic_CMP) {
+                    dummy_register.bytes[0] = *dest_lo;
+                    dummy_register.bytes[1] = *dest_hi;
+                    dest_lo = &dummy_register.bytes[0];
+                    dest_hi = &dummy_register.bytes[1];
+                }
+
                 if (byte_op) {
                     uint8_t src_u8 = S86_CAST(uint8_t)src;
                     if (subtract)
                         src_u8 = ~src_u8 + 1;
 
-                    uint8_t dest_u8     = dest.bytes[dest_map->byte];
+                    uint8_t dest_u8     = *dest_lo;
                     uint8_t new_dest_u8 = dest_u8 + src_u8;
 
                     // NOTE: Overflow check
@@ -1580,42 +1659,42 @@ int main(int argc, char **argv)
                     register_file.flags.sign = new_dest_u8 & 0b1000'0000;
 
                     // NOTE: Update the register
-                    dest.bytes[dest_map->byte] = new_dest_u8;
+                    *dest_lo = new_dest_u8;
                 } else {
                     if (subtract)
                         src = ~src + 1;
 
+                    uint16_t dest_word = *(uint16_t *)dest_lo;
                     S86_Register16 new_dest = {0};
-                    new_dest.word           = dest.word + src;
+                    new_dest.word           = dest_word + src;
 
                     // NOTE: Overflow check
-                    bool initially_matching_sign_masks = (dest.word & sign_mask16) == (src           & sign_mask16);
-                    bool sign_masks_changed            = (dest.word & sign_mask16) != (new_dest.word & sign_mask16);
+                    bool initially_matching_sign_masks = (dest_word & sign_mask16) == (src           & sign_mask16);
+                    bool sign_masks_changed            = (dest_word & sign_mask16) != (new_dest.word & sign_mask16);
                     register_file.flags.overflow       = initially_matching_sign_masks && sign_masks_changed;
 
                     // NOTE: Auxiliary carry check
-                    uint8_t     dest_lo_nibble_lo =     dest.bytes[S86_RegisterByte_Lo] & 0b0000'1111 >> 0;
-                    uint8_t     dest_lo_nibble_hi =     dest.bytes[S86_RegisterByte_Lo] & 0b1111'0000 >> 4;
+                    uint8_t     dest_lo_nibble_lo = *dest_lo & 0b0000'1111 >> 0;
+                    uint8_t     dest_lo_nibble_hi = *dest_lo & 0b1111'0000 >> 4;
                     uint8_t new_dest_lo_nibble_lo = new_dest.bytes[S86_RegisterByte_Lo] & 0b0000'1111 >> 0;
                     uint8_t new_dest_lo_nibble_hi = new_dest.bytes[S86_RegisterByte_Lo] & 0b1111'0000 >> 4;
                     register_file.flags.auxiliary_carry = subtract ? new_dest_lo_nibble_hi > dest_lo_nibble_hi
                                                                    : new_dest_lo_nibble_lo < dest_lo_nibble_lo;
 
                     // NOTE: Carry check
-                    register_file.flags.carry = subtract ? new_dest.word > dest.word : new_dest.word < dest.word;
+                    register_file.flags.carry = subtract ? new_dest.word > dest_word : new_dest.word < dest_word;
 
                     // NOTE: Sign check
                     register_file.flags.sign = new_dest.word & 0b1000'0000'0000'0000;
 
                     // NOTE: Update the register
-                    dest.word = new_dest.word;
+                    *dest_lo = new_dest.bytes[0];
+                    *dest_hi = new_dest.bytes[1];
                 }
 
-                int lo_bit_count           = _mm_popcnt_u32(S86_CAST(uint32_t)dest.bytes[S86_RegisterByte_Lo]);
+                int lo_bit_count           = _mm_popcnt_u32(S86_CAST(uint32_t)*dest_lo);
                 register_file.flags.parity = lo_bit_count % 2 == 0;
-                register_file.flags.zero   = byte_op ? dest.bytes[dest_map->byte] == 0 : dest.word == 0;
-                if (opcode.mnemonic != S86_Mnemonic_CMP)
-                    *dest_map->reg = dest;
+                register_file.flags.zero   = byte_op ? *dest_lo == 0 : *(uint16_t*)dest_lo == 0;
             } break;
 
             case S86_Mnemonic_JNE_JNZ: {
@@ -1650,14 +1729,18 @@ int main(int argc, char **argv)
                     register_file.instruction_ptr += S86_CAST(int16_t)opcode.displacement;
             } break;
         }
-        clocks_counter += opcode.clocks;
+        clocks_counter += opcode.base_clocks + opcode.effective_address_clocks;
 
         // NOTE: Printing ==========================================================================
         S86_PrintFmt(" ; ");
 
         // NOTE: Clocks
         if (log_cycle_counts) {
-            S86_PrintFmt("Clocks: +%u = %u |", opcode.clocks, clocks_counter);
+            S86_PrintFmt("Clocks: +%u = %u", opcode.base_clocks + opcode.effective_address_clocks, clocks_counter);
+            if (opcode.effective_address_clocks) {
+                S86_PrintFmt(" (%u + %uea)", opcode.base_clocks, opcode.effective_address_clocks);
+            }
+            S86_PrintFmt(" | ");
         }
 
         // NOTE: Registers
