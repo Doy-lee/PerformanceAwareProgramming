@@ -375,6 +375,8 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
                             S86_MnemonicOp     *seg_reg,
                             bool                cycle_count_8088)
 {
+    (void)cycle_count_8088;
+
     size_t buffer_start_index     = buffer_it->index;
     char op_code_bytes[2]         = {0};
     size_t op_code_size           = 0;
@@ -422,6 +424,7 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
     S86_ASSERT(op_decode_type != S86_OpDecodeType_Count && "Unknown instruction");
 
     S86_Opcode result      = {0};
+    result.type            = op_decode_type;
     result.mnemonic        = op_decode->mnemonic;
     result.lock_prefix     = *lock_prefix;
     result.seg_reg_prefix  = *seg_reg;
@@ -860,44 +863,6 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
             : S86_WordBytePrefix_Byte;
     }
 
-    if ((op_decode_type >= S86_OpDecodeType_MOVRegOrMemToOrFromReg) &&
-        (op_decode_type <= S86_OpDecodeType_MOVSegRegToRegOrMem)) {
-        if (S86_MnemonicOpIsRegister(result.dest) && result.src == S86_MnemonicOp_Immediate && !result.effective_addr_loads_mem) {
-            result.base_clocks = 4;
-        } else if (S86_MnemonicOpIsRegister(result.dest) && S86_MnemonicOpIsRegister(result.src) && !result.effective_addr_loads_mem) {
-            result.base_clocks = 2;
-        } else if (S86_MnemonicOpIsRegister(result.dest) && result.src == S86_MnemonicOp_DirectAddress && result.effective_addr_loads_mem && result.effective_addr == S86_EffectiveAddress_Src) {
-            result.base_clocks              = 8;
-            result.effective_address_clocks = 6;
-            if (cycle_count_8088 && result.wide) {
-                result.transfer_penalty_clocks = 4;
-            }
-        } else if (S86_MnemonicOpIsRegister(result.dest) && S86_MnemonicOpIsRegister(result.src) && result.effective_addr_loads_mem && result.effective_addr == S86_EffectiveAddress_Src) {
-            result.base_clocks              = 8;
-            result.effective_address_clocks = result.displacement ? 9 : 5;
-            if (cycle_count_8088 && result.wide) {
-                result.transfer_penalty_clocks = 4;
-            }
-        } else if (S86_MnemonicOpIsRegister(result.dest) && S86_MnemonicOpIsRegister(result.src) && result.effective_addr_loads_mem && result.effective_addr == S86_EffectiveAddress_Dest) {
-            result.base_clocks              = 9;
-            result.effective_address_clocks = result.displacement ? 9 : 5;
-            if (cycle_count_8088 && result.wide) {
-                result.transfer_penalty_clocks = 4;
-            }
-        }
-    } else if (op_decode_type >= S86_OpDecodeType_ADDRegOrMemToOrFromReg && op_decode_type <= S86_OpDecodeType_ADDImmediateToAccum) {
-        if (S86_MnemonicOpIsRegister(result.dest) && S86_MnemonicOpIsRegister(result.src) && result.effective_addr == S86_EffectiveAddress_None) {
-            result.base_clocks = 3;
-        } else if (S86_MnemonicOpIsRegister(result.dest) && S86_MnemonicOpIsRegister(result.src) && result.effective_addr == S86_EffectiveAddress_Dest) {
-            result.base_clocks              = 16;
-            result.effective_address_clocks = result.displacement ? 9 : 5;
-            if (cycle_count_8088 && result.wide) {
-                result.transfer_penalty_clocks = 4 * 2;
-            }
-        } else if (S86_MnemonicOpIsRegister(result.dest) && result.src == S86_MnemonicOp_Immediate) {
-            result.base_clocks = 4;
-        }
-    }
 
     size_t buffer_end_index = buffer_it->index;
     result.byte_size        = S86_CAST(uint8_t)(buffer_end_index - buffer_start_index);
@@ -1373,6 +1338,11 @@ int main(int argc, char **argv)
         }
 
         // NOTE: Simulate instruction ==============================================================
+        bool cycle_count_8088             = log_cycle_counts == CycleCount_8088;
+        uint32_t base_clocks              = 0;
+        uint32_t effective_address_clocks = 0;
+        uint32_t transfer_penalty_clocks  = 0;
+
         S86_RegisterFile prev_register_file = register_file;
         switch (opcode.mnemonic) {
             case S86_Mnemonic_PUSH:          /*FALLTHRU*/
@@ -1543,6 +1513,48 @@ int main(int argc, char **argv)
                     *dest_lo = S86_CAST(uint8_t)(src >> 0);
                 if (dest_hi)
                     *dest_hi = S86_CAST(uint8_t)(src >> 8);
+
+                if (S86_MnemonicOpIsRegister(opcode.dest) && opcode.src == S86_MnemonicOp_Immediate && !opcode.effective_addr_loads_mem) {
+                    base_clocks = 4;
+                } else if (S86_MnemonicOpIsRegister(opcode.dest) && S86_MnemonicOpIsRegister(opcode.src) && !opcode.effective_addr_loads_mem) {
+                    base_clocks = 2;
+                } else if (S86_MnemonicOpIsRegister(opcode.dest) && opcode.src == S86_MnemonicOp_DirectAddress && opcode.effective_addr_loads_mem && opcode.effective_addr == S86_EffectiveAddress_Src) {
+                    base_clocks              = 8;
+                    effective_address_clocks = 6;
+                    if (cycle_count_8088 && opcode.wide) {
+                        transfer_penalty_clocks = 4;
+                    }
+                } else if (S86_MnemonicOpIsRegister(opcode.dest) && S86_MnemonicOpIsRegister(opcode.src) && opcode.effective_addr_loads_mem && opcode.effective_addr == S86_EffectiveAddress_Src) {
+                    base_clocks              = 8;
+                    effective_address_clocks = opcode.displacement ? 9 : 5;
+                    if (cycle_count_8088 && opcode.wide) {
+                        transfer_penalty_clocks = 4;
+                    }
+                } else if (S86_MnemonicOpIsRegister(opcode.dest) && S86_MnemonicOpIsRegister(opcode.src) && opcode.effective_addr_loads_mem && opcode.effective_addr == S86_EffectiveAddress_Dest) {
+                    base_clocks              = 9;
+                    effective_address_clocks = opcode.displacement ? 9 : 5;
+                    if (cycle_count_8088 && opcode.wide) {
+                        transfer_penalty_clocks = 4;
+                    }
+                } else if (S86_MnemonicOpIsRegister(opcode.dest) && S86_MnemonicOpIsEffectiveAddress(opcode.src) && opcode.effective_addr_loads_mem && opcode.effective_addr == S86_EffectiveAddress_Src) {
+                    base_clocks = 8;
+                    if (cycle_count_8088 && opcode.wide)
+                        transfer_penalty_clocks = 4;
+                    if (opcode.src == S86_MnemonicOp_BP_DI || opcode.src == S86_MnemonicOp_BX_SI) {
+                        effective_address_clocks = opcode.displacement ? 11 : 7;
+                    } else if (opcode.src == S86_MnemonicOp_BP_SI || opcode.src == S86_MnemonicOp_BX_DI) {
+                        effective_address_clocks = opcode.displacement ? 12 : 8;
+                    }
+                } else if (S86_MnemonicOpIsEffectiveAddress(opcode.dest) && S86_MnemonicOpIsRegister(opcode.src) && opcode.effective_addr_loads_mem && opcode.effective_addr == S86_EffectiveAddress_Dest) {
+                    base_clocks = 9;
+                    if (cycle_count_8088 && opcode.wide)
+                        transfer_penalty_clocks = 4;
+                    if (opcode.dest == S86_MnemonicOp_BP_DI || opcode.dest == S86_MnemonicOp_BX_SI) {
+                        effective_address_clocks = opcode.displacement ? 11 : 7;
+                    } else if (opcode.dest == S86_MnemonicOp_BP_SI || opcode.dest == S86_MnemonicOp_BX_DI) {
+                        effective_address_clocks = opcode.displacement ? 12 : 8;
+                    }
+                }
             } break;
 
             case S86_Mnemonic_ADD: /*FALLTHRU*/
@@ -1556,10 +1568,11 @@ int main(int argc, char **argv)
                 }
                 S86_ASSERT(dest_map);
 
-                bool subtract       = opcode.mnemonic != S86_Mnemonic_ADD;
-                bool byte_op        = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
+                bool subtract = opcode.mnemonic != S86_Mnemonic_ADD;
+                bool byte_op  = opcode.dest >= S86_MnemonicOp_AL && opcode.dest <= S86_MnemonicOp_BH;
 
-                uint16_t src = 0;
+                uint16_t src         = 0;
+                uint16_t src_address = 0;
                 if (opcode.src == S86_MnemonicOp_Immediate) {
                     if (byte_op) {
                         S86_ASSERT(opcode.immediate < S86_CAST(uint8_t)-1);
@@ -1581,21 +1594,20 @@ int main(int argc, char **argv)
 
                     if ((src_map->mnemonic_op >= S86_MnemonicOp_BX_SI &&
                         src_map->mnemonic_op <= S86_MnemonicOp_BP_DI) || (opcode.effective_addr == S86_EffectiveAddress_Src && opcode.effective_addr_loads_mem)) {
-                        uint16_t address = 0;
                         if (src_map->mnemonic_op == S86_MnemonicOp_BX_SI) {
-                            address = src_map->reg->word + register_file.reg.file.si.word;
+                            src_address = S86_CAST(uint16_t)(src_map->reg->word + register_file.reg.file.si.word + opcode.displacement);
                         } else if (src_map->mnemonic_op == S86_MnemonicOp_BX_DI) {
-                            address = src_map->reg->word + register_file.reg.file.di.word;
+                            src_address = S86_CAST(uint16_t)(src_map->reg->word + register_file.reg.file.di.word + opcode.displacement);
                         } else if (src_map->mnemonic_op == S86_MnemonicOp_BP_SI) {
-                            address = src_map->reg->word + register_file.reg.file.si.word;
+                            src_address = S86_CAST(uint16_t)(src_map->reg->word + register_file.reg.file.si.word + opcode.displacement);
                         } else if (src_map->mnemonic_op == S86_MnemonicOp_BP_DI) {
-                            address = src_map->reg->word + register_file.reg.file.di.word;
+                            src_address = S86_CAST(uint16_t)(src_map->reg->word + register_file.reg.file.di.word + opcode.displacement);
                         } else if (opcode.effective_addr == S86_EffectiveAddress_Src) {
-                            address = src_map->reg->word;
+                            src_address = S86_CAST(uint16_t)(src_map->reg->word + opcode.displacement);
                         } else {
                             S86_ASSERT(!"Invalid code path");
                         }
-                        src = *(uint16_t *)&memory[address];
+                        src = *(uint16_t *)&memory[src_address];
                     } else {
                         src = byte_op ? src_map->reg->bytes[src_map->byte] : src_map->reg->word;
                     }
@@ -1614,13 +1626,15 @@ int main(int argc, char **argv)
                 if (opcode.effective_addr == S86_EffectiveAddress_Dest && opcode.effective_addr_loads_mem) {
                     uint16_t address = dest_map->reg->word;
                     if (dest_map->mnemonic_op == S86_MnemonicOp_BX_SI) {
-                        address = dest_map->reg->word + register_file.reg.file.si.word;
+                        address = S86_CAST(uint16_t)(dest_map->reg->word + register_file.reg.file.si.word + opcode.displacement);
                     } else if (dest_map->mnemonic_op == S86_MnemonicOp_BX_DI) {
-                        address = dest_map->reg->word + register_file.reg.file.di.word;
+                        address = S86_CAST(uint16_t)(dest_map->reg->word + register_file.reg.file.di.word + opcode.displacement);
                     } else if (dest_map->mnemonic_op == S86_MnemonicOp_BP_SI) {
-                        address = dest_map->reg->word + register_file.reg.file.si.word;
+                        address = S86_CAST(uint16_t)(dest_map->reg->word + register_file.reg.file.si.word + opcode.displacement);
                     } else if (dest_map->mnemonic_op == S86_MnemonicOp_BP_DI) {
-                        address = dest_map->reg->word + register_file.reg.file.di.word;
+                        address = S86_CAST(uint16_t)(dest_map->reg->word + register_file.reg.file.di.word + opcode.displacement);
+                    } else if (opcode.effective_addr == S86_EffectiveAddress_Dest) {
+                        address = S86_CAST(uint16_t)(dest_map->reg->word + opcode.displacement);
                     }
                     dest_lo = memory + address;
                     dest_hi = byte_op ? NULL : memory + (address + 1);
@@ -1705,6 +1719,50 @@ int main(int argc, char **argv)
                 int lo_bit_count           = _mm_popcnt_u32(S86_CAST(uint32_t)*dest_lo);
                 register_file.flags.parity = lo_bit_count % 2 == 0;
                 register_file.flags.zero   = byte_op ? *dest_lo == 0 : *(uint16_t*)dest_lo == 0;
+
+                if (S86_MnemonicOpIsRegister(opcode.dest) && S86_MnemonicOpIsRegister(opcode.src) && opcode.effective_addr == S86_EffectiveAddress_None) {
+                    base_clocks = 3;
+                } else if (S86_MnemonicOpIsRegister(opcode.dest) && S86_MnemonicOpIsRegister(opcode.src) && opcode.effective_addr == S86_EffectiveAddress_Dest) {
+                    base_clocks              = 16;
+                    effective_address_clocks = opcode.displacement ? 9 : 5;
+                    if (cycle_count_8088) {
+                        if (opcode.wide) {
+                            transfer_penalty_clocks = 8;
+                        }
+                    } else {
+                        if ((uintptr_t)dest_lo & 1) {
+                            transfer_penalty_clocks = 8;
+                        }
+                    }
+                } else if (S86_MnemonicOpIsRegister(opcode.dest) && opcode.src == S86_MnemonicOp_Immediate) {
+                    base_clocks = 4;
+                } else if (S86_MnemonicOpIsEffectiveAddress(opcode.dest) && opcode.src == S86_MnemonicOp_Immediate && opcode.effective_addr_loads_mem) {
+                    base_clocks = 17;
+                    if (cycle_count_8088 && opcode.wide)
+                        transfer_penalty_clocks = 8;
+                    if (opcode.dest == S86_MnemonicOp_BP_DI || opcode.dest == S86_MnemonicOp_BX_SI) {
+                        effective_address_clocks = opcode.displacement ? 11 : 7;
+                    } else if (opcode.dest == S86_MnemonicOp_BP_SI || opcode.dest == S86_MnemonicOp_BX_DI) {
+                        effective_address_clocks = opcode.displacement ? 12 : 8;
+                    }
+                } else if (S86_MnemonicOpIsRegister(opcode.dest) && S86_MnemonicOpIsEffectiveAddress(opcode.src) && opcode.effective_addr_loads_mem && opcode.effective_addr == S86_EffectiveAddress_Src) {
+                    base_clocks = 9;
+                    if (cycle_count_8088) {
+                        if (opcode.wide) {
+                            transfer_penalty_clocks = 4;
+                        }
+                    } else {
+                        if (src_address & 1) {
+                            transfer_penalty_clocks = 4;
+                        }
+                    }
+
+                    if (opcode.src == S86_MnemonicOp_BP_DI || opcode.src == S86_MnemonicOp_BX_SI) {
+                        effective_address_clocks = opcode.displacement ? 11 : 7;
+                    } else if (opcode.src == S86_MnemonicOp_BP_SI || opcode.src == S86_MnemonicOp_BX_DI) {
+                        effective_address_clocks = opcode.displacement ? 12 : 8;
+                    }
+                }
             } break;
 
             case S86_Mnemonic_JNE_JNZ: {
@@ -1739,20 +1797,21 @@ int main(int argc, char **argv)
                     register_file.instruction_ptr += S86_CAST(int16_t)opcode.displacement;
             } break;
         }
-        clocks_counter += opcode.base_clocks + opcode.effective_address_clocks + opcode.transfer_penalty_clocks;
+
+        clocks_counter += base_clocks + effective_address_clocks + transfer_penalty_clocks;
 
         // NOTE: Printing ==========================================================================
         S86_PrintFmt(" ; ");
 
         // NOTE: Clocks
         if (log_cycle_counts) {
-            S86_PrintFmt("Clocks: +%u = %u", opcode.base_clocks + opcode.effective_address_clocks + opcode.transfer_penalty_clocks, clocks_counter);
-            if (opcode.effective_address_clocks || opcode.transfer_penalty_clocks) {
-                S86_PrintFmt(" (%u", opcode.base_clocks);
-                if (opcode.effective_address_clocks)
-                    S86_PrintFmt(" + %uea", opcode.effective_address_clocks);
-                if (opcode.transfer_penalty_clocks)
-                    S86_PrintFmt(" + %up", opcode.transfer_penalty_clocks);
+            S86_PrintFmt("Clocks: +%u = %u", base_clocks + effective_address_clocks + transfer_penalty_clocks, clocks_counter);
+            if (effective_address_clocks || transfer_penalty_clocks) {
+                S86_PrintFmt(" (%u", base_clocks);
+                if (effective_address_clocks)
+                    S86_PrintFmt(" + %uea", effective_address_clocks);
+                if (transfer_penalty_clocks)
+                    S86_PrintFmt(" + %up", transfer_penalty_clocks);
                 S86_PrintFmt(")");
             }
             S86_PrintFmt(" | ");

@@ -323,6 +323,7 @@ typedef enum S86_WordBytePrefix {
 } S86_WordBytePrefix;
 
 typedef struct S86_Opcode {
+    S86_OpDecodeType     type;
     uint8_t              byte_size;                ///< Number of bytes used to encode this opcode
     S86_Mnemonic         mnemonic;                 ///< Mnemonic type
     S86_EffectiveAddress effective_addr;           ///< Src/dest op is an effective address calculation

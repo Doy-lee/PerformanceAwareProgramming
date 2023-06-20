@@ -287,3 +287,21 @@ nasm %build_dir_listing_0056%_disassembled.asm
 
 fc /B %build_dir_listing_0056%     %build_dir_listing_0056%_disassembled     || exit /b 1
 fc /N %build_dir_listing_0056%.txt %build_dir_listing_0056%_disassembled.txt || exit /b 1
+
+REM ================================================================================================
+set listing_0057=listing_0057_challenge_cycles
+set build_dir_listing_0057=%build_dir%\%listing_0057%
+
+copy /Y %script_dir%\%listing_0057% %build_dir% 1>NUL
+copy /Y %script_dir%\%listing_0057%.txt %build_dir% 1>NUL
+
+pushd %build_dir%
+%build_dir%\sim8086.exe --exec --log-instruction-ptr --log-cycle-counts 8086 %build_dir_listing_0057%  > %build_dir_listing_0057%_disassembled.txt
+%build_dir%\sim8086.exe                                                      %build_dir_listing_0057%  > %build_dir_listing_0057%_disassembled.asm
+%build_dir%\sim8086.exe --exec --log-instruction-ptr --log-cycle-counts 8088 %build_dir_listing_0057% >> %build_dir_listing_0057%_disassembled.txt
+popd
+
+nasm %build_dir_listing_0057%_disassembled.asm
+
+fc /B %build_dir_listing_0057%     %build_dir_listing_0057%_disassembled     || exit /b 1
+fc /N %build_dir_listing_0057%.txt %build_dir_listing_0057%_disassembled.txt || exit /b 1
