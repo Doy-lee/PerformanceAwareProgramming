@@ -1,61 +1,67 @@
 // NOTE: Macros
 // ============================================================================
-#define S86_STRINGIFY2(token) #token
-#define S86_STRINGIFY(token) S86_STRINGIFY2(token)
-#define S86_ASSERT(expr)                                                                         \
-    if (!(expr)) {                                                                               \
-        S86_PrintLnFmt("Assertion triggered [file=\"" __FILE__ ":" S86_STRINGIFY(__LINE__) "\", expr=\"" #expr "\"]");                                                                     \
-        __debugbreak();                                                                          \
-    }                                                                                            \
+#define PAP_STRINGIFY2(token) #token
+#define PAP_STRINGIFY(token) PAP_STRINGIFY2(token)
 
-#define S86_ARRAY_UCOUNT(array) sizeof((array)) / sizeof((array)[0])
-#define S86_CAST(Type) (Type)
+#if defined(NDEBUG)
+    #define PAP_ASSERT(expr)
+#else
+    #define PAP_ASSERT(expr)                                                                         \
+        if (!(expr)) {                                                                               \
+            PAP_PrintLnFmt("Assertion triggered [file=\"" __FILE__ ":" PAP_STRINGIFY(__LINE__) "\", expr=\"" #expr "\"]");                                                                     \
+            __debugbreak();                                                                          \
+        }
+#endif
+
+#define PAP_ARRAY_UCOUNT(array) sizeof((array)) / sizeof((array)[0])
+#define PAP_CAST(Type) (Type)
 
 // NOTE: Globals
 // ============================================================================
-typedef struct S86_Globals {
+typedef struct PAP_Globals {
     HANDLE stdout_handle;
     bool   write_to_console;
-} S86_Globals;
+} PAP_Globals;
 
-S86_Globals s86_globals;
+PAP_Globals pap_globals;
 
 // NOTE: Strings
 // ============================================================================
-typedef struct S86_Str8 {
+typedef struct PAP_Str8 {
     char *data;
     size_t size;
-} S86_Str8;
+} PAP_Str8;
 
-#define S86_STR8(string) (S86_Str8){.data = (string), .size = S86_ARRAY_UCOUNT(string) - 1 }
-#define S86_STR8_FMT(string) (int)((string).size), (string).data
+#define PAP_STR8(string) (PAP_Str8){.data = (string), .size = PAP_ARRAY_UCOUNT(string) - 1 }
+#define PAP_STR8_FMT(string) (int)((string).size), (string).data
 
-bool S86_Str8_Equals(S86_Str8 lhs, S86_Str8 rhs);
+bool PAP_Str8_Equals(PAP_Str8 lhs, PAP_Str8 rhs);
 
 // NOTE: Buffer
 // ============================================================================
-typedef struct S86_Buffer {
+typedef struct PAP_Buffer {
     char *data;
     size_t size;
-} S86_Buffer;
+} PAP_Buffer;
 
-typedef struct S86_BufferIterator {
-    S86_Buffer buffer;
+typedef struct PAP_BufferIterator {
+    PAP_Buffer buffer;
     size_t     index;
-} S86_BufferIterator;
+} PAP_BufferIterator;
 
-bool S86_BufferIsValid(S86_Buffer buffer);
-S86_BufferIterator S86_BufferIteratorInit(S86_Buffer buffer);
-bool S86_BufferIteratorHasMoreBytes(S86_BufferIterator it);
-uint8_t S86_BufferIteratorNextByte(S86_BufferIterator *it);
+bool               PAP_BufferIsValid             (PAP_Buffer buffer);
+PAP_BufferIterator PAP_BufferIteratorInit        (PAP_Buffer buffer);
+bool               PAP_BufferIteratorHasMoreBytes(PAP_BufferIterator it);
+uint8_t            PAP_BufferIteratorNextByte    (PAP_BufferIterator *it);
 
 // NOTE: File
 // ============================================================================
-S86_Buffer S86_FileRead(char const *file_path);
-void S86_FileFree(S86_Buffer buffer);
-bool S86_FileWrite(char const *file_path, void const *buffer, size_t buffer_size);
+PAP_Buffer PAP_FileRead (char const *file_path);
+void       PAP_FileFree (PAP_Buffer buffer);
+bool       PAP_FileWrite(char const *file_path, void const *buffer, size_t buffer_size);
 
 // NOTE: Print
 // ============================================================================
-void S86_PrintLn(S86_Str8 string);
-void S86_PrintLnFmt(char const *fmt, ...);
+void PAP_PrintHandle(void *handle, PAP_Str8 string);
+void PAP_PrintLn    (PAP_Str8 string);
+void PAP_PrintLnFmt (char const *fmt, ...);

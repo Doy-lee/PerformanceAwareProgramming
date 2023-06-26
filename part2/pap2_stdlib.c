@@ -1,49 +1,49 @@
 // NOTE: Implementation
 // ============================================================================
-bool S86_Str8_Equals(S86_Str8 lhs, S86_Str8 rhs)
+bool PAP_Str8_Equals(PAP_Str8 lhs, PAP_Str8 rhs)
 {
     bool result = lhs.size == rhs.size && memcmp(lhs.data, rhs.data, lhs.size) == 0;
     return result;
 }
 
-bool S86_BufferIsValid(S86_Buffer buffer)
+bool PAP_BufferIsValid(PAP_Buffer buffer)
 {
     bool result = buffer.data && buffer.size;
     return result;
 }
 
-S86_BufferIterator S86_BufferIteratorInit(S86_Buffer buffer)
+PAP_BufferIterator PAP_BufferIteratorInit(PAP_Buffer buffer)
 {
-    S86_BufferIterator result = {0};
+    PAP_BufferIterator result = {0};
     result.buffer             = buffer;
     return result;
 }
 
-bool S86_BufferIteratorHasMoreBytes(S86_BufferIterator it)
+bool PAP_BufferIteratorHasMoreBytes(PAP_BufferIterator it)
 {
-    bool result = S86_BufferIsValid(it.buffer) && it.index < it.buffer.size;
+    bool result = PAP_BufferIsValid(it.buffer) && it.index < it.buffer.size;
     return result;
 }
 
-uint8_t S86_BufferIteratorPeekByte(S86_BufferIterator *it)
+uint8_t PAP_BufferIteratorPeekByte(PAP_BufferIterator *it)
 {
-    S86_ASSERT(it);
-    S86_ASSERT(S86_BufferIsValid(it->buffer));
-    S86_ASSERT(it->index < it->buffer.size);
+    PAP_ASSERT(it);
+    PAP_ASSERT(PAP_BufferIsValid(it->buffer));
+    PAP_ASSERT(it->index < it->buffer.size);
     uint8_t result = it->buffer.data[it->index];
     return result;
 }
 
-uint8_t S86_BufferIteratorNextByte(S86_BufferIterator *it)
+uint8_t PAP_BufferIteratorNextByte(PAP_BufferIterator *it)
 {
-    uint8_t result = S86_BufferIteratorPeekByte(it);
+    uint8_t result = PAP_BufferIteratorPeekByte(it);
     it->index++;
     return result;
 }
 
-S86_Buffer S86_FileRead(char const *file_path)
+PAP_Buffer PAP_FileRead(char const *file_path)
 {
-    S86_Buffer result = {0};
+    PAP_Buffer result = {0};
 
     // NOTE: Determine file size
     // =========================================================================
@@ -69,7 +69,7 @@ S86_Buffer S86_FileRead(char const *file_path)
     // NOTE: Allocate buffer
     // =========================================================================
     uint64_t file_size = (uint64_t)file_attrib_data.nFileSizeHigh << 32 | (uint64_t)file_attrib_data.nFileSizeLow << 0;
-    S86_ASSERT(file_size < (DWORD)-1);
+    PAP_ASSERT(file_size < (DWORD)-1);
     char *buffer = VirtualAlloc(
       /*LPVOID lpAddress*/ NULL,
       /*SIZE_T dwSize*/ file_size,
@@ -86,7 +86,7 @@ S86_Buffer S86_FileRead(char const *file_path)
     BOOL read_file_result = ReadFile(
       /*HANDLE       hFile*/ file_handle,
       /*LPVOID       lpBuffer*/ buffer,
-      /*DWORD        nNumberOfBytesToRead*/ S86_CAST(DWORD)file_size,
+      /*DWORD        nNumberOfBytesToRead*/ PAP_CAST(DWORD)file_size,
       /*LPDWORD      lpNumberOfBytesRead*/ &bytes_read,
       /*LPOVERLAPPED lpOverlapped*/ NULL
     );
@@ -105,13 +105,13 @@ end:
     return result;
 };
 
-void S86_FileFree(S86_Buffer buffer)
+void PAP_FileFree(PAP_Buffer buffer)
 {
-    if (S86_BufferIsValid(buffer))
+    if (PAP_BufferIsValid(buffer))
         VirtualFree(buffer.data, 0, MEM_RELEASE);
 }
 
-bool S86_FileWrite(char const *file_path, void const *buffer, size_t buffer_size)
+bool PAP_FileWrite(char const *file_path, void const *buffer, size_t buffer_size)
 {
     bool result = false;
 
@@ -136,41 +136,47 @@ bool S86_FileWrite(char const *file_path, void const *buffer, size_t buffer_size
     BOOL write_file_result = WriteFile(
       /*HANDLE       hFile*/ file_handle,
       /*LPVOID       lpBuffer*/ buffer,
-      /*DWORD        nNumberOfBytesToWrite*/ S86_CAST(DWORD)buffer_size,
+      /*DWORD        nNumberOfBytesToWrite*/ PAP_CAST(DWORD)buffer_size,
       /*LPDWORD      lpNumberOfBytesWrite*/ &bytes_written,
       /*LPOVERLAPPED lpOverlapped*/ NULL
     );
 
-    S86_ASSERT(bytes_written == buffer_size);
+    PAP_ASSERT(bytes_written == buffer_size);
     result = write_file_result && bytes_written == buffer_size;
     CloseHandle(file_handle);
     return result;
 };
 
-void S86_Print(S86_Str8 string)
+void PAP_PrintHandle(void *handle, PAP_Str8 string)
 {
-    if (s86_globals.stdout_handle == NULL) {
-        s86_globals.stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD bytes_written = 0;
+    WriteFile(handle, string.data, PAP_CAST(DWORD)string.size, &bytes_written, NULL);
+    (void)bytes_written;
+}
+
+void PAP_Print(PAP_Str8 string)
+{
+    if (pap_globals.stdout_handle == NULL) {
+        pap_globals.stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
         DWORD mode = 0;
         BOOL get_console_mode_result = GetConsoleMode(
-          /*HANDLE  hConsoleHandle*/ s86_globals.stdout_handle,
+          /*HANDLE  hConsoleHandle*/ pap_globals.stdout_handle,
           /*LPDWORD lpMode*/ &mode
         );
-        s86_globals.write_to_console = get_console_mode_result != 0;
+        pap_globals.write_to_console = get_console_mode_result != 0;
     }
 
 
-    S86_ASSERT(string.size < S86_CAST(DWORD)-1);
-    if (s86_globals.write_to_console) {
+    PAP_ASSERT(string.size < PAP_CAST(DWORD)-1);
+    if (pap_globals.write_to_console) {
         DWORD chars_written = 0;
-        WriteConsoleA(s86_globals.stdout_handle, string.data, (DWORD)string.size, &chars_written, NULL);
+        WriteConsoleA(pap_globals.stdout_handle, string.data, (DWORD)string.size, &chars_written, NULL);
     } else {
-        DWORD bytes_written = 0;
-        WriteFile(s86_globals.stdout_handle, string.data, (DWORD)string.size, &bytes_written, NULL);
+        PAP_PrintHandle(pap_globals.stdout_handle, string);
     }
 }
 
-void S86_PrintFmt(char const *fmt, ...)
+void PAP_PrintFmt(char const *fmt, ...)
 {
     va_list args, args_copy;
     va_start(args, fmt);
@@ -180,23 +186,23 @@ void S86_PrintFmt(char const *fmt, ...)
     va_end(args_copy);
 
     char buffer[8192];
-    S86_ASSERT(string_size >= 0 && string_size < S86_ARRAY_UCOUNT(buffer));
+    PAP_ASSERT(string_size >= 0 && string_size < PAP_ARRAY_UCOUNT(buffer));
     if (string_size) {
         vsnprintf(buffer, sizeof(buffer), fmt, args);
-        S86_Str8 string = {.data = buffer, .size = string_size};
-        S86_Print(string);
+        PAP_Str8 string = {.data = buffer, .size = string_size};
+        PAP_Print(string);
     }
 
     va_end(args);
 }
 
-void S86_PrintLn(S86_Str8 string)
+void PAP_PrintLn(PAP_Str8 string)
 {
-    S86_Print(string);
-    S86_Print(S86_STR8("\n"));
+    PAP_Print(string);
+    PAP_Print(PAP_STR8("\n"));
 }
 
-void S86_PrintLnFmt(char const *fmt, ...)
+void PAP_PrintLnFmt(char const *fmt, ...)
 {
     va_list args, args_copy;
     va_start(args, fmt);
@@ -206,11 +212,11 @@ void S86_PrintLnFmt(char const *fmt, ...)
     va_end(args_copy);
 
     char buffer[8192];
-    S86_ASSERT(string_size >= 0 && string_size < S86_ARRAY_UCOUNT(buffer));
+    PAP_ASSERT(string_size >= 0 && string_size < PAP_ARRAY_UCOUNT(buffer));
     if (string_size) {
         vsnprintf(buffer, sizeof(buffer), fmt, args);
-        S86_Str8 string = {.data = buffer, .size = string_size};
-        S86_PrintLn(string);
+        PAP_Str8 string = {.data = buffer, .size = string_size};
+        PAP_PrintLn(string);
     }
 
     va_end(args);
