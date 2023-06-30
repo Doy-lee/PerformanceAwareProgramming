@@ -1,49 +1,96 @@
 // NOTE: Implementation
 // ============================================================================
-bool PAP_Str8_Equals(PAP_Str8 lhs, PAP_Str8 rhs)
+bool HAV_Str8_Equals(HAV_Str8 lhs, HAV_Str8 rhs)
 {
     bool result = lhs.size == rhs.size && memcmp(lhs.data, rhs.data, lhs.size) == 0;
     return result;
 }
 
-bool PAP_BufferIsValid(PAP_Buffer buffer)
+HAV_Str8ToU64Result HAV_Str8_ToU64(HAV_Str8 string)
+{
+    HAV_Str8ToU64Result result = {0};
+
+    size_t ch_index = 0;
+    while (ch_index < string.size && HAV_CharIsWhiteSpace(string.data[ch_index]))
+        ch_index++;
+
+    for (; ch_index < string.size; ch_index++) {
+        char ch = string.data[ch_index];
+        if (ch >= '0' && ch <= '9') {
+            result.value = (result.value * 10) + (ch - '0');
+        } else {
+            return result;
+        }
+    }
+
+    result.success = true;
+    return result;
+}
+
+bool HAV_CharIsWhiteSpace(char ch)
+{
+    bool result = ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t';
+    return result;
+}
+
+#pragma warning(push)
+#pragma warning(disable: 4146) // warning C4146: unary minus operator applied to unsigned type, result still unsigned
+uint32_t HAV_PCG32_Pie (uint64_t *state)
+{
+    uint64_t old = *state ^ 0xc90fdaa2adf85459ULL;
+    *state = *state * 6364136223846793005ULL + 0xc90fdaa2adf85459ULL;
+    uint32_t xorshifted = (uint32_t)(((old >> 18u) ^ old) >> 27u);
+    uint32_t rot = old >> 59u;
+    return (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
+}
+#pragma warning(pop)
+
+f64 HAV_PCG32_PieF64(uint64_t *state, f64 min, f64 max)
+{
+    uint32_t u32_value = HAV_PCG32_Pie(state);
+    f64 t01            = HAV_CAST(f64)u32_value / HAV_CAST(f64)HAV_CAST(uint32_t)-1;
+    f64 result         = min + (max - min) * t01;
+    return result;
+}
+
+bool HAV_BufferIsValid(HAV_Buffer buffer)
 {
     bool result = buffer.data && buffer.size;
     return result;
 }
 
-PAP_BufferIterator PAP_BufferIteratorInit(PAP_Buffer buffer)
+HAV_BufferIterator HAV_BufferIteratorInit(HAV_Buffer buffer)
 {
-    PAP_BufferIterator result = {0};
+    HAV_BufferIterator result = {0};
     result.buffer             = buffer;
     return result;
 }
 
-bool PAP_BufferIteratorHasMoreBytes(PAP_BufferIterator it)
+bool HAV_BufferIteratorHasMoreBytes(HAV_BufferIterator it)
 {
-    bool result = PAP_BufferIsValid(it.buffer) && it.index < it.buffer.size;
+    bool result = HAV_BufferIsValid(it.buffer) && it.index < it.buffer.size;
     return result;
 }
 
-uint8_t PAP_BufferIteratorPeekByte(PAP_BufferIterator *it)
+uint8_t HAV_BufferIteratorPeekByte(HAV_BufferIterator *it)
 {
-    PAP_ASSERT(it);
-    PAP_ASSERT(PAP_BufferIsValid(it->buffer));
-    PAP_ASSERT(it->index < it->buffer.size);
+    HAV_ASSERT(it);
+    HAV_ASSERT(HAV_BufferIsValid(it->buffer));
+    HAV_ASSERT(it->index < it->buffer.size);
     uint8_t result = it->buffer.data[it->index];
     return result;
 }
 
-uint8_t PAP_BufferIteratorNextByte(PAP_BufferIterator *it)
+uint8_t HAV_BufferIteratorNextByte(HAV_BufferIterator *it)
 {
-    uint8_t result = PAP_BufferIteratorPeekByte(it);
+    uint8_t result = HAV_BufferIteratorPeekByte(it);
     it->index++;
     return result;
 }
 
-PAP_Buffer PAP_FileRead(char const *file_path)
+HAV_Buffer HAV_FileRead(char const *file_path)
 {
-    PAP_Buffer result = {0};
+    HAV_Buffer result = {0};
 
     // NOTE: Determine file size
     // =========================================================================
@@ -69,7 +116,7 @@ PAP_Buffer PAP_FileRead(char const *file_path)
     // NOTE: Allocate buffer
     // =========================================================================
     uint64_t file_size = (uint64_t)file_attrib_data.nFileSizeHigh << 32 | (uint64_t)file_attrib_data.nFileSizeLow << 0;
-    PAP_ASSERT(file_size < (DWORD)-1);
+    HAV_ASSERT(file_size < (DWORD)-1);
     char *buffer = VirtualAlloc(
       /*LPVOID lpAddress*/ NULL,
       /*SIZE_T dwSize*/ file_size,
@@ -86,7 +133,7 @@ PAP_Buffer PAP_FileRead(char const *file_path)
     BOOL read_file_result = ReadFile(
       /*HANDLE       hFile*/ file_handle,
       /*LPVOID       lpBuffer*/ buffer,
-      /*DWORD        nNumberOfBytesToRead*/ PAP_CAST(DWORD)file_size,
+      /*DWORD        nNumberOfBytesToRead*/ HAV_CAST(DWORD)file_size,
       /*LPDWORD      lpNumberOfBytesRead*/ &bytes_read,
       /*LPOVERLAPPED lpOverlapped*/ NULL
     );
@@ -105,13 +152,13 @@ end:
     return result;
 };
 
-void PAP_FileFree(PAP_Buffer buffer)
+void HAV_FileFree(HAV_Buffer buffer)
 {
-    if (PAP_BufferIsValid(buffer))
+    if (HAV_BufferIsValid(buffer))
         VirtualFree(buffer.data, 0, MEM_RELEASE);
 }
 
-bool PAP_FileWrite(char const *file_path, void const *buffer, size_t buffer_size)
+bool HAV_FileWrite(char const *file_path, void const *buffer, size_t buffer_size)
 {
     bool result = false;
 
@@ -136,25 +183,25 @@ bool PAP_FileWrite(char const *file_path, void const *buffer, size_t buffer_size
     BOOL write_file_result = WriteFile(
       /*HANDLE       hFile*/ file_handle,
       /*LPVOID       lpBuffer*/ buffer,
-      /*DWORD        nNumberOfBytesToWrite*/ PAP_CAST(DWORD)buffer_size,
+      /*DWORD        nNumberOfBytesToWrite*/ HAV_CAST(DWORD)buffer_size,
       /*LPDWORD      lpNumberOfBytesWrite*/ &bytes_written,
       /*LPOVERLAPPED lpOverlapped*/ NULL
     );
 
-    PAP_ASSERT(bytes_written == buffer_size);
+    HAV_ASSERT(bytes_written == buffer_size);
     result = write_file_result && bytes_written == buffer_size;
     CloseHandle(file_handle);
     return result;
 };
 
-void PAP_PrintHandle(void *handle, PAP_Str8 string)
+void HAV_PrintHandle(void *handle, HAV_Str8 string)
 {
     DWORD bytes_written = 0;
-    WriteFile(handle, string.data, PAP_CAST(DWORD)string.size, &bytes_written, NULL);
+    WriteFile(handle, string.data, HAV_CAST(DWORD)string.size, &bytes_written, NULL);
     (void)bytes_written;
 }
 
-void PAP_Print(PAP_Str8 string)
+void HAV_Print(HAV_Str8 string)
 {
     if (pap_globals.stdout_handle == NULL) {
         pap_globals.stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -167,16 +214,16 @@ void PAP_Print(PAP_Str8 string)
     }
 
 
-    PAP_ASSERT(string.size < PAP_CAST(DWORD)-1);
+    HAV_ASSERT(string.size < HAV_CAST(DWORD)-1);
     if (pap_globals.write_to_console) {
         DWORD chars_written = 0;
         WriteConsoleA(pap_globals.stdout_handle, string.data, (DWORD)string.size, &chars_written, NULL);
     } else {
-        PAP_PrintHandle(pap_globals.stdout_handle, string);
+        HAV_PrintHandle(pap_globals.stdout_handle, string);
     }
 }
 
-void PAP_PrintFmt(char const *fmt, ...)
+void HAV_PrintFmt(char const *fmt, ...)
 {
     va_list args, args_copy;
     va_start(args, fmt);
@@ -186,23 +233,23 @@ void PAP_PrintFmt(char const *fmt, ...)
     va_end(args_copy);
 
     char buffer[8192];
-    PAP_ASSERT(string_size >= 0 && string_size < PAP_ARRAY_UCOUNT(buffer));
+    HAV_ASSERT(string_size >= 0 && string_size < HAV_ARRAY_UCOUNT(buffer));
     if (string_size) {
         vsnprintf(buffer, sizeof(buffer), fmt, args);
-        PAP_Str8 string = {.data = buffer, .size = string_size};
-        PAP_Print(string);
+        HAV_Str8 string = {.data = buffer, .size = string_size};
+        HAV_Print(string);
     }
 
     va_end(args);
 }
 
-void PAP_PrintLn(PAP_Str8 string)
+void HAV_PrintLn(HAV_Str8 string)
 {
-    PAP_Print(string);
-    PAP_Print(PAP_STR8("\n"));
+    HAV_Print(string);
+    HAV_Print(HAV_STR8("\n"));
 }
 
-void PAP_PrintLnFmt(char const *fmt, ...)
+void HAV_PrintLnFmt(char const *fmt, ...)
 {
     va_list args, args_copy;
     va_start(args, fmt);
@@ -212,11 +259,11 @@ void PAP_PrintLnFmt(char const *fmt, ...)
     va_end(args_copy);
 
     char buffer[8192];
-    PAP_ASSERT(string_size >= 0 && string_size < PAP_ARRAY_UCOUNT(buffer));
+    HAV_ASSERT(string_size >= 0 && string_size < HAV_ARRAY_UCOUNT(buffer));
     if (string_size) {
         vsnprintf(buffer, sizeof(buffer), fmt, args);
-        PAP_Str8 string = {.data = buffer, .size = string_size};
-        PAP_PrintLn(string);
+        HAV_Str8 string = {.data = buffer, .size = string_size};
+        HAV_PrintLn(string);
     }
 
     va_end(args);
