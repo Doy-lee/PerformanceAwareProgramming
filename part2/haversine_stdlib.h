@@ -15,6 +15,7 @@
 
 #define HAV_ARRAY_UCOUNT(array) sizeof((array)) / sizeof((array)[0])
 #define HAV_CAST(Type) (Type)
+#define HAV_MIN(a, b) ((a) < (b) ? (a) : (b))
 
 typedef float f32;
 typedef double f64;
@@ -40,13 +41,20 @@ typedef struct HAV_Str8ToU64Result {
     uint64_t value;
 } HAV_Str8ToU64Result;
 
+typedef struct HAV_Str8BinarySplitResult {
+    HAV_Str8 lhs;
+    HAV_Str8 rhs;
+} HAV_Str8BinarySplitResult;
+
 #define HAV_STR8(string) (HAV_Str8){.data = (string), .size = HAV_ARRAY_UCOUNT(string) - 1 }
 #define HAV_STR8_FMT(string) (int)((string).size), (string).data
 
-bool                HAV_Str8_Equals(HAV_Str8 lhs, HAV_Str8 rhs);
-HAV_Str8ToU64Result HAV_Str8_ToU64(HAV_Str8 string);
+bool                      HAV_Str8_Equals(HAV_Str8 lhs, HAV_Str8 rhs);
+HAV_Str8ToU64Result       HAV_Str8_ToU64(HAV_Str8 string);
+HAV_Str8BinarySplitResult HAV_Str8_BinarySplit(HAV_Str8 buffer, HAV_Str8 find);
 
-bool                HAV_CharIsWhiteSpace(char ch);
+bool                      HAV_CharIsWhiteSpace(char ch);
+bool                      HAV_CharIsDigit(char ch);
 
 // NOTE: PCG32
 // ============================================================================

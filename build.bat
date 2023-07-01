@@ -321,4 +321,7 @@ REM Build ======================================================================
 pushd %part2_build_dir%
 cl %part2_dir%\haversine_generator.c /W4 /WX /Z7 /nologo     /Fe:haversine_generator_debug || exit /b 1
 cl %part2_dir%\haversine_generator.c /W4 /WX /Z7 /nologo /O2 /Fe:haversine_generator_release || exit /b 1
+
+cl %part2_dir%\haversine.c /W4 /WX /Z7 /nologo     /Fe:haversine_debug || exit /b 1
+cl %part2_dir%\haversine.c /W4 /WX /Z7 /nologo /O2 /Fe:haversine_release || exit /b 1
 popd

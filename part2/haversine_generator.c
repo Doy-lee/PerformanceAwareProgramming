@@ -99,8 +99,13 @@ int main(int argc, char **argv)
     uint64_t random_seed = random_seed_u64_result.value;
     uint64_t rng_state   = random_seed;
 
+    char json_file_name[1024];
+    char answers_file_name[1024];
+    snprintf(json_file_name,    sizeof(json_file_name), "haversine_%zu_%s_%zu.json", point_count, point_generator == PointGenerator_Cluster ? "cluster" : "uniform", random_seed);
+    snprintf(answers_file_name, sizeof(json_file_name), "haversine_%zu_%s_%zu.f64",  point_count, point_generator == PointGenerator_Cluster ? "cluster" : "uniform", random_seed);
+
     HANDLE haversine_json_file_handle = CreateFile(
-      /*LPCSTR                lpFileName*/            "haversine.json",
+      /*LPCSTR                lpFileName*/            json_file_name,
       /*DWORD                 dwDesiredAccess*/       GENERIC_WRITE,
       /*DWORD                 dwShareMode*/           0,
       /*LPSECURITY_ATTRIBUTES lpSecurityAttributes*/  NULL,
@@ -110,7 +115,7 @@ int main(int argc, char **argv)
     );
 
     HANDLE haversine_f64_file_handle = CreateFile(
-      /*LPCSTR                lpFileName*/            "haversine.f64",
+      /*LPCSTR                lpFileName*/            answers_file_name,
       /*DWORD                 dwDesiredAccess*/       GENERIC_WRITE,
       /*DWORD                 dwShareMode*/           0,
       /*LPSECURITY_ATTRIBUTES lpSecurityAttributes*/  NULL,

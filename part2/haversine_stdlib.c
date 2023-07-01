@@ -27,9 +27,31 @@ HAV_Str8ToU64Result HAV_Str8_ToU64(HAV_Str8 string)
     return result;
 }
 
+HAV_Str8BinarySplitResult HAV_Str8_BinarySplit(HAV_Str8 buffer, HAV_Str8 find)
+{
+    HAV_Str8BinarySplitResult result = {0};
+    result.lhs                       = buffer;
+    for (size_t index = 0; (index + find.size) <= buffer.size; index++) {
+        HAV_Str8 check = {buffer.data + index, find.size};
+        if (HAV_Str8_Equals(find, check)) {
+            result.lhs.size = index;
+            result.rhs.data = check.data + find.size;
+            result.rhs.size = buffer.size - (index + find.size);
+            break;
+        }
+    }
+    return result;
+}
+
 bool HAV_CharIsWhiteSpace(char ch)
 {
     bool result = ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t';
+    return result;
+}
+
+bool HAV_CharIsDigit(char ch)
+{
+    bool result = ch >= '0' && ch <= '9';
     return result;
 }
 
