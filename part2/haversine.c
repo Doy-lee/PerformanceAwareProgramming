@@ -14,7 +14,7 @@ typedef struct Str8FindResult {
     HAV_Str8 match_to_end_of_buffer;
 } Str8FindResult;
 
-Str8FindResult FindFirstCharThatLooksLikeANumber(HAV_Str8 buffer)
+static Str8FindResult FindFirstCharThatLooksLikeANumber(HAV_Str8 buffer)
 {
     Str8FindResult result = {0};
     for (size_t index = 0; !result.found && index < buffer.size; index++) {
@@ -26,6 +26,52 @@ Str8FindResult FindFirstCharThatLooksLikeANumber(HAV_Str8 buffer)
         }
     }
     return result;
+}
+
+static f64 StringToF64(HAV_Str8 value)
+{
+    f64 result = 0.f;
+    Str8FindResult find_result = FindFirstCharThatLooksLikeANumber(value);
+    if (!find_result.found)
+        return result;
+
+    bool negative = false;
+    HAV_Str8 real_number_string = find_result.match_to_end_of_buffer;
+    if (find_result.match.data[0] == '+' || find_result.match.data[0] == '-') {
+        negative = find_result.match.data[0] == '-';
+        real_number_string.data++;
+        real_number_string.size--;
+    }
+
+    HAV_Str8BinarySplitResult number_split = HAV_Str8_BinarySplit(real_number_string, HAV_STR8("."));
+    HAV_Str8 integer_part                  = number_split.lhs;
+    HAV_Str8 decimal_part                  = number_split.rhs;
+
+    uint64_t integer_part_as_u64 = 0;
+    for (size_t index = 0; index < integer_part.size; index++) {
+        integer_part_as_u64 *= 10;
+        integer_part_as_u64 += integer_part.data[index] - '0';
+    }
+
+    uint64_t decimal_part_as_u64 = 0;
+    uint64_t decimal_magnitude   = 1;
+    for (size_t index = 0; index < decimal_part.size; index++) {
+        decimal_part_as_u64 *= 10;
+        decimal_part_as_u64 += decimal_part.data[index] - '0';
+        decimal_magnitude   *= 10;
+    }
+
+    typedef union FU64 {
+        f64      f64_value;
+        uint64_t u64_value;
+    } FU64;
+
+    FU64 fu64      = {0};
+    fu64.f64_value = HAV_CAST(f64)integer_part_as_u64 + (HAV_CAST(f64)decimal_part_as_u64 / decimal_magnitude);
+    if (negative) {
+        fu64.u64_value |= (1ULL << 63);
+    }
+    return fu64.f64_value;
 }
 
 #define PRINT_USAGE HAV_PrintLnFmt("Usage: %s [haversine_input.json] [answers.f64]", argv[0])
@@ -43,12 +89,13 @@ int main(int argc, char **argv)
     if (argc == 3)
         arg_answers = (HAV_Str8){.data = argv[2], .size = strlen(argv[2])};
 
-    HAV_Buffer buffer = HAV_FileRead(arg_json.data);
-    if (!HAV_BufferIsValid(buffer))
+    HAV_Buffer json_buffer = HAV_FileRead(arg_json.data);
+    if (!HAV_BufferIsValid(json_buffer))
         return 0;
 
+    f64 haversine_sum = 0;
     size_t pair_count = 0;
-    HAV_Str8 json_it  = (HAV_Str8){.data = buffer.data, .size = buffer.size};
+    HAV_Str8 json_it  = (HAV_Str8){.data = json_buffer.data, .size = json_buffer.size};
     for (;; pair_count++) {
         HAV_Str8BinarySplitResult x0_key = HAV_Str8_BinarySplit(json_it, HAV_STR8("x0"));
         if (!x0_key.rhs.size)
@@ -69,25 +116,45 @@ int main(int argc, char **argv)
         Str8FindResult            y1_find_value = FindFirstCharThatLooksLikeANumber(y1_key.rhs);
         HAV_Str8BinarySplitResult y1_value      = HAV_Str8_BinarySplit(y1_find_value.match_to_end_of_buffer, HAV_STR8("}"));
 
-        HAV_PrintLnFmt("{x0: %.*s, y0: %.*s, x1 %.*s, y1: %.*s}",
-                       HAV_STR8_FMT(x0_value.lhs),
-                       HAV_STR8_FMT(y0_value.lhs),
-                       HAV_STR8_FMT(x1_value.lhs),
-                       HAV_STR8_FMT(y1_value.lhs));
+        f64 x0 = StringToF64(x0_value.lhs);
+        f64 y0 = StringToF64(y0_value.lhs);
+        f64 x1 = StringToF64(x1_value.lhs);
+        f64 y1 = StringToF64(y1_value.lhs);
+
+        #if 0
+        HAV_PrintLnFmt("{x0: %.*s (%f), y0: %.*s (%f), x1 %.*s (%f), y1: %.*s (%f)}",
+                       HAV_STR8_FMT(x0_value.lhs), x0,
+                       HAV_STR8_FMT(y0_value.lhs), y0,
+                       HAV_STR8_FMT(x1_value.lhs), x1,
+                       HAV_STR8_FMT(y1_value.lhs), y1);
+        #endif
 
         json_it = y1_value.rhs;
+
+        f64 haversine_dist = ReferenceHaversine(x0, y0, x1, y1, /*EarthRadius*/ 6372.8);
+        haversine_sum     += haversine_dist;
     }
 
-    size_t input_size           = buffer.size;
-    f64 haversine_sum           = 0;
-    f64 reference_haversine_sum = 0;
-    f64 difference              = 0;
+    haversine_sum /= pair_count;
+    size_t input_size = json_buffer.size;
     HAV_PrintLnFmt("Input size: %zu", input_size);
     HAV_PrintLnFmt("Pair count: %zu", pair_count);
     HAV_PrintLnFmt("Haversine sum: %f", haversine_sum);
 
-    HAV_PrintLn(HAV_STR8("Validation: "));
-    HAV_PrintLnFmt("Reference sum: %f", reference_haversine_sum);
-    HAV_PrintLnFmt("Difference: %f", difference);
+    if (arg_answers.size) {
+        HAV_Buffer answers_buffer = HAV_FileRead(arg_answers.data);
+        if (HAV_BufferIsValid(answers_buffer)) {
+            HAV_ASSERT(answers_buffer.size == (pair_count * sizeof(f64)) + /*Reference Sum*/ sizeof(f64));
+
+            f64 reference_haversine_sum = 0;
+            memcpy(&reference_haversine_sum, answers_buffer.data + (pair_count * sizeof(f64)), sizeof(reference_haversine_sum));
+
+            f64 difference = reference_haversine_sum - haversine_sum;
+            HAV_PrintLn(HAV_STR8("\nValidation: "));
+            HAV_PrintLnFmt("Reference sum: %f", reference_haversine_sum);
+            HAV_PrintLnFmt("Difference: %f", difference);
+        }
+
+    }
     return 0;
 }
