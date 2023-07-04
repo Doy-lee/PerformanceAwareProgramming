@@ -1,3 +1,5 @@
+#include <stdint.h>
+
 // NOTE: Macros
 // ============================================================================
 #define HAV_STRINGIFY2(token) #token
@@ -19,6 +21,7 @@
 
 typedef float f32;
 typedef double f64;
+typedef uint64_t u64;
 
 // NOTE: Globals
 // ============================================================================

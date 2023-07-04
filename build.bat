@@ -324,4 +324,8 @@ cl %part2_dir%\haversine_generator.c /W4 /WX /Z7 /nologo /O2 /Fe:haversine_gener
 
 cl %part2_dir%\haversine.c /W4 /WX /Z7 /nologo     /Fe:haversine_debug || exit /b 1
 cl %part2_dir%\haversine.c /W4 /WX /Z7 /nologo /O2 /Fe:haversine_release || exit /b 1
+
+cl %part2_dir%\listing_0071_os_timer_main.cpp /W4 /WX /Z7 /O2 /nologo /Fe:listing_0071_os_timer_main_release || exit /b 1
+cl %part2_dir%\listing_0072_cpu_timer_main.cpp /W4 /WX /Z7 /O2 /nologo /Fe:listing_0072_cpu_timer_main_release || exit /b 1
+cl %part2_dir%\listing_0073_cpu_timer_guessfreq_main.cpp /W4 /WX /Z7 /O2 /nologo /Fe:listing_0073_cpu_timer_guessfreq_release || exit /b 1
 popd

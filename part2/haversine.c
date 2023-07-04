@@ -6,7 +6,9 @@
 #include "haversine_stdlib.h"
 #include "haversine_stdlib.c"
 #include <math.h>
+
 #include "listing_0065_haversine_formula.cpp"
+#include "listing_0074_platform_metrics.cpp"
 
 typedef struct Str8FindResult {
     bool     found;
@@ -84,6 +86,8 @@ int main(int argc, char **argv)
         return -1;
     }
 
+    u64 cpu_start_time = ReadCPUTimer();
+
     HAV_Str8 arg_json    = {argv[1], strlen(argv[1])};
     HAV_Str8 arg_answers = {0};
     if (argc == 3)
@@ -93,9 +97,15 @@ int main(int argc, char **argv)
     if (!HAV_BufferIsValid(json_buffer))
         return 0;
 
-    f64 haversine_sum = 0;
-    size_t pair_count = 0;
-    HAV_Str8 json_it  = (HAV_Str8){.data = json_buffer.data, .size = json_buffer.size};
+    u64 cpu_misc_setup_time = ReadCPUTimer();
+
+    u64 cpu_elapsed_parse_time         = 0;
+    u64 cpu_elapsed_haversine_sum_time = 0;
+
+    f64 haversine_sum        = 0;
+    size_t pair_count        = 0;
+    HAV_Str8 json_it         = (HAV_Str8){.data = json_buffer.data, .size = json_buffer.size};
+    u64 cpu_begin_parse_time = ReadCPUTimer();
     for (;; pair_count++) {
         HAV_Str8BinarySplitResult x0_key = HAV_Str8_BinarySplit(json_it, HAV_STR8("x0"));
         if (!x0_key.rhs.size)
@@ -121,6 +131,9 @@ int main(int argc, char **argv)
         f64 x1 = StringToF64(x1_value.lhs);
         f64 y1 = StringToF64(y1_value.lhs);
 
+        u64 cpu_end_parse_time = ReadCPUTimer();
+        cpu_elapsed_parse_time += cpu_end_parse_time - cpu_begin_parse_time;
+
         #if 0
         HAV_PrintLnFmt("{x0: %.*s (%f), y0: %.*s (%f), x1 %.*s (%f), y1: %.*s (%f)}",
                        HAV_STR8_FMT(x0_value.lhs), x0,
@@ -129,11 +142,16 @@ int main(int argc, char **argv)
                        HAV_STR8_FMT(y1_value.lhs), y1);
         #endif
 
-        json_it = y1_value.rhs;
-
         f64 haversine_dist = ReferenceHaversine(x0, y0, x1, y1, /*EarthRadius*/ 6372.8);
         haversine_sum     += haversine_dist;
+        u64 cpu_end_sum_time = ReadCPUTimer();
+        cpu_elapsed_haversine_sum_time += cpu_end_sum_time - cpu_end_parse_time;
+
+        cpu_begin_parse_time = cpu_end_sum_time;
+        json_it              = y1_value.rhs;
     }
+
+    u64 cpu_end_parse_and_sum_time = ReadCPUTimer();
 
     haversine_sum /= pair_count;
     size_t input_size = json_buffer.size;
@@ -154,7 +172,21 @@ int main(int argc, char **argv)
             HAV_PrintLnFmt("Reference sum: %f", reference_haversine_sum);
             HAV_PrintLnFmt("Difference: %f", difference);
         }
-
     }
+
+    u64 cpu_end_time = ReadCPUTimer();
+    u64 cpu_elapsed_time = cpu_end_time - cpu_start_time;
+    u64 cpu_frequency  = EstimateCPUTimerFreq();
+    if (cpu_frequency)
+        printf("\nTotal time: %0.4fms (CPU freq %llu)\n", 1000.0 * (f64)cpu_elapsed_time / (f64)cpu_frequency, cpu_frequency);
+
+    u64 cpu_elapsed_setup_time = cpu_misc_setup_time - cpu_start_time;
+    u64 cpu_elapsed_verify_time = cpu_end_time - cpu_end_parse_and_sum_time;
+
+    printf("   Setup: %llu (%.2f%%)\n", cpu_elapsed_setup_time,         (f64)cpu_elapsed_setup_time         / (f64)cpu_elapsed_time * 100.0);
+    printf("   Parse: %llu (%.2f%%)\n", cpu_elapsed_parse_time,         (f64)cpu_elapsed_parse_time         / (f64)cpu_elapsed_time * 100.0);
+    printf("     Sum: %llu (%.2f%%)\n", cpu_elapsed_haversine_sum_time, (f64)cpu_elapsed_haversine_sum_time / (f64)cpu_elapsed_time * 100.0);
+    printf("  Verify: %llu (%.2f%%)\n", cpu_elapsed_verify_time,        (f64)cpu_elapsed_verify_time        / (f64)cpu_elapsed_time * 100.0);
+
     return 0;
 }
