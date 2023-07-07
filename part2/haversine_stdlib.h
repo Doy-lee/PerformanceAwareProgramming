@@ -18,6 +18,7 @@
 #define HAV_ARRAY_UCOUNT(array) sizeof((array)) / sizeof((array)[0])
 #define HAV_CAST(Type) (Type)
 #define HAV_MIN(a, b) ((a) < (b) ? (a) : (b))
+#define HAV_MAX(a, b) ((a) > (b) ? (a) : (b))
 
 typedef float f32;
 typedef double f64;
