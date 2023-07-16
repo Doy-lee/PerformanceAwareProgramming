@@ -10,22 +10,23 @@
 #include "listing_0065_haversine_formula.cpp"
 #include "listing_0074_platform_metrics.cpp"
 
-typedef struct ProfilerRecord {
-    HAV_Str8 label;
-    u64      elapsed_tsc;
-    u64      elapsed_tsc_child;
-    u64      hits;
-} ProfilerRecord;
-
 typedef struct ProfilerAnchor {
+    HAV_Str8 label;
+    u64      elapsed_tsc_exclusive; // Does not include children
+    u64      elapsed_tsc_inclusive; // Includes children
+    u64      hits;
+} ProfilerAnchor;
+
+typedef struct ProfilerZone {
     u64      parent_index;
     uint32_t index;
     HAV_Str8 label;
+    u64      elapsed_tsc_inclusive;
     u64      tsc;
-} ProfilerAnchor;
+} ProfilerZone;
 
 typedef struct Profiler {
-    ProfilerRecord records[4096];
+    ProfilerAnchor anchors[4096];
     u64            begin_tsc;
     u64            end_tsc;
     u64            parent_index;
@@ -33,29 +34,31 @@ typedef struct Profiler {
 
 static Profiler g_profiler;
 
-#define Profiler_BeginAnchor(label) Profiler_BeginAnchor_(HAV_STR8(label), __COUNTER__ + 1)
-static ProfilerAnchor Profiler_BeginAnchor_(HAV_Str8 label, uint32_t index)
+#define Profiler_BeginZone(label) Profiler_BeginZone_(HAV_STR8(label), __COUNTER__ + 1)
+static ProfilerZone Profiler_BeginZone_(HAV_Str8 label, uint32_t index)
 {
-    ProfilerAnchor result   = {0};
-    result.index            = index;
-    result.label            = label;
-    result.tsc              = ReadCPUTimer();
-    result.parent_index     = g_profiler.parent_index;
-    g_profiler.parent_index = index;
+    ProfilerZone result          = {0};
+    result.index                 = index;
+    result.label                 = label;
+    result.tsc                   = ReadCPUTimer();
+    result.elapsed_tsc_inclusive = g_profiler.anchors[index].elapsed_tsc_inclusive;
+    result.parent_index          = g_profiler.parent_index;
+    g_profiler.parent_index      = index;
     return result;
 }
 
-static void Profiler_EndAnchor(ProfilerAnchor anchor)
+static void Profiler_EndZone(ProfilerZone zone)
 {
-    u64 elapsed_tsc         = ReadCPUTimer() - anchor.tsc;
-    ProfilerRecord* record  = g_profiler.records + anchor.index;
-    record->elapsed_tsc    += elapsed_tsc;
-    record->label           = anchor.label;
-    record->hits++;
+    u64 elapsed_tsc                = ReadCPUTimer() - zone.tsc;
+    ProfilerAnchor* anchor         = g_profiler.anchors + zone.index;
+    ProfilerAnchor* parent         = g_profiler.anchors + zone.parent_index;
 
-    ProfilerRecord* parent     = g_profiler.records + anchor.parent_index;
-    parent->elapsed_tsc_child += elapsed_tsc;
-    g_profiler.parent_index    = anchor.parent_index;
+    anchor->elapsed_tsc_exclusive += elapsed_tsc;
+    anchor->elapsed_tsc_inclusive  = zone.elapsed_tsc_inclusive + elapsed_tsc;
+    anchor->label                  = zone.label;
+    anchor->hits++;
+    parent->elapsed_tsc_exclusive -= elapsed_tsc;
+    g_profiler.parent_index        = zone.parent_index;
 }
 
 static void Profiler_Dump()
@@ -65,16 +68,15 @@ static void Profiler_Dump()
     if (cpu_frequency)
         printf("\nTotal time: %0.4fms (CPU freq %llu)\n", 1000.0 * (f64)total_elapsed_tsc / (f64)cpu_frequency, cpu_frequency);
 
-    for (uint32_t index = 1; index < HAV_ARRAY_UCOUNT(g_profiler.records); index++) {
-        ProfilerRecord const *record = g_profiler.records + index;
-        if (!record->elapsed_tsc)
+    for (uint32_t index = 1; index < HAV_ARRAY_UCOUNT(g_profiler.anchors); index++) {
+        ProfilerAnchor const *anchor = g_profiler.anchors + index;
+        if (!anchor->elapsed_tsc_inclusive)
             break;
 
-        u64 record_exclusive_tsc = record->elapsed_tsc - record->elapsed_tsc_child;
-        f64 percent = total_elapsed_tsc ? (f64)record_exclusive_tsc / (f64)total_elapsed_tsc * 100.0 : 100.0;
-        printf("   %.*s[%zu]: %llu (%.2f%%", HAV_STR8_FMT(record->label), record->hits, record_exclusive_tsc, percent);
-        if (record->elapsed_tsc_child) {
-            f64 percent_w_children = total_elapsed_tsc ? ((f64)record->elapsed_tsc / (f64)total_elapsed_tsc * 100.0) : 100.0;
+        f64 percent = total_elapsed_tsc ? (f64)anchor->elapsed_tsc_exclusive / (f64)total_elapsed_tsc * 100.0 : 100.0;
+        printf("   %.*s[%zu]: %llu (%.2f%%", HAV_STR8_FMT(anchor->label), anchor->hits, anchor->elapsed_tsc_exclusive, percent);
+        if (anchor->elapsed_tsc_inclusive != anchor->elapsed_tsc_exclusive) {
+            f64 percent_w_children = total_elapsed_tsc ? ((f64)anchor->elapsed_tsc_inclusive / (f64)total_elapsed_tsc * 100.0) : 100.0;
             printf(", %.2f%% w/children", percent_w_children);
         }
         printf(")\n");
@@ -163,19 +165,19 @@ int main(int argc, char **argv)
     if (argc == 3)
         arg_answers = (HAV_Str8){.data = argv[2], .size = strlen(argv[2])};
 
-    ProfilerAnchor prof_file_read_anchor = Profiler_BeginAnchor("File Read");
+    ProfilerZone prof_file_read_zone = Profiler_BeginZone("File Read");
     HAV_Buffer json_buffer = HAV_FileRead(arg_json.data);
-    Profiler_EndAnchor(prof_file_read_anchor);
+    Profiler_EndZone(prof_file_read_zone);
 
     if (!HAV_BufferIsValid(json_buffer))
         return 0;
 
-    ProfilerAnchor prof_parse_and_sum_anchor = Profiler_BeginAnchor("Parse&Hav Sum");
+    ProfilerZone prof_parse_and_sum_zone = Profiler_BeginZone("Parse&Hav Sum");
     f64 haversine_sum = 0;
     size_t pair_count = 0;
     HAV_Str8 json_it  = (HAV_Str8){.data = json_buffer.data, .size = json_buffer.size};
     for (;; pair_count++) {
-        ProfilerAnchor prof_json_parse_anchor = Profiler_BeginAnchor("Parse");
+        ProfilerZone prof_json_parse_zone = Profiler_BeginZone("Parse");
         f64 x0 = 0.f, y0 = 0.f, x1 = 0.f, y1 = 0.f;
         HAV_Str8BinarySplitResult x0_key = HAV_Str8_BinarySplit(json_it, HAV_STR8("x0"));
         if (x0_key.rhs.size) {
@@ -209,16 +211,16 @@ int main(int argc, char **argv)
                        HAV_STR8_FMT(y1_value.lhs), y1);
         #endif
 
-        Profiler_EndAnchor(prof_json_parse_anchor);
+        Profiler_EndZone(prof_json_parse_zone);
         if (!x0_key.rhs.size)
             break;
 
-        ProfilerAnchor prof_haversine_sum_anchor = Profiler_BeginAnchor("Hav Sum");
+        ProfilerZone prof_haversine_sum_zone = Profiler_BeginZone("Hav Sum");
         f64 haversine_dist = ReferenceHaversine(x0, y0, x1, y1, /*EarthRadius*/ 6372.8);
         haversine_sum     += haversine_dist;
-        Profiler_EndAnchor(prof_haversine_sum_anchor);
+        Profiler_EndZone(prof_haversine_sum_zone);
     }
-    Profiler_EndAnchor(prof_parse_and_sum_anchor);
+    Profiler_EndZone(prof_parse_and_sum_zone);
 
     haversine_sum /= pair_count;
     size_t input_size = json_buffer.size;
