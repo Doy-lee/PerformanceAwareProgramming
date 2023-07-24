@@ -17,14 +17,6 @@ typedef struct ProfilerAnchor {
     u64      hits;
 } ProfilerAnchor;
 
-typedef struct ProfilerZone {
-    u64      parent_index;
-    uint32_t index;
-    HAV_Str8 label;
-    u64      elapsed_tsc_inclusive;
-    u64      tsc;
-} ProfilerZone;
-
 typedef struct Profiler {
     ProfilerAnchor anchors[4096];
     u64            begin_tsc;
@@ -33,33 +25,6 @@ typedef struct Profiler {
 } Profiler;
 
 static Profiler g_profiler;
-
-#define Profiler_BeginZone(label) Profiler_BeginZone_(HAV_STR8(label), __COUNTER__ + 1)
-static ProfilerZone Profiler_BeginZone_(HAV_Str8 label, uint32_t index)
-{
-    ProfilerZone result          = {0};
-    result.index                 = index;
-    result.label                 = label;
-    result.tsc                   = ReadCPUTimer();
-    result.elapsed_tsc_inclusive = g_profiler.anchors[index].elapsed_tsc_inclusive;
-    result.parent_index          = g_profiler.parent_index;
-    g_profiler.parent_index      = index;
-    return result;
-}
-
-static void Profiler_EndZone(ProfilerZone zone)
-{
-    u64 elapsed_tsc                = ReadCPUTimer() - zone.tsc;
-    ProfilerAnchor* anchor         = g_profiler.anchors + zone.index;
-    ProfilerAnchor* parent         = g_profiler.anchors + zone.parent_index;
-
-    anchor->elapsed_tsc_exclusive += elapsed_tsc;
-    anchor->elapsed_tsc_inclusive  = zone.elapsed_tsc_inclusive + elapsed_tsc;
-    anchor->label                  = zone.label;
-    anchor->hits++;
-    parent->elapsed_tsc_exclusive -= elapsed_tsc;
-    g_profiler.parent_index        = zone.parent_index;
-}
 
 static void Profiler_Dump()
 {
@@ -81,6 +46,50 @@ static void Profiler_Dump()
         }
         printf(")\n");
     }
+}
+
+typedef struct ProfilerZone {
+    u64      parent_index;
+    uint32_t index;
+    HAV_Str8 label;
+    u64      elapsed_tsc_inclusive;
+    u64      tsc;
+} ProfilerZone;
+
+#define Profiler_BeginZone(label) Profiler_BeginZone_(HAV_STR8(label), __COUNTER__ + 1)
+
+static ProfilerZone Profiler_BeginZone_(HAV_Str8 label, uint32_t index)
+{
+    ProfilerZone result = {0};
+    #if defined(HAV_PROFILER)
+    result.index                 = index;
+    result.label                 = label;
+    result.tsc                   = ReadCPUTimer();
+    result.elapsed_tsc_inclusive = g_profiler.anchors[index].elapsed_tsc_inclusive;
+    result.parent_index          = g_profiler.parent_index;
+    g_profiler.parent_index      = index;
+    #else
+    (void)label; (void)index;
+    #endif
+    return result;
+}
+
+static void Profiler_EndZone(ProfilerZone zone)
+{
+    #if defined(HAV_PROFILER)
+    u64 elapsed_tsc                = ReadCPUTimer() - zone.tsc;
+    ProfilerAnchor* anchor         = g_profiler.anchors + zone.index;
+    ProfilerAnchor* parent         = g_profiler.anchors + zone.parent_index;
+
+    anchor->elapsed_tsc_exclusive += elapsed_tsc;
+    anchor->elapsed_tsc_inclusive  = zone.elapsed_tsc_inclusive + elapsed_tsc;
+    anchor->label                  = zone.label;
+    anchor->hits++;
+    parent->elapsed_tsc_exclusive -= elapsed_tsc;
+    g_profiler.parent_index        = zone.parent_index;
+    #else
+    (void)zone;
+    #endif
 }
 
 typedef struct Str8FindResult {

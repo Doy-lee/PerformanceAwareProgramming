@@ -322,8 +322,14 @@ pushd %part2_build_dir%
 cl %part2_dir%\haversine_generator.c /W4 /WX /Z7 /nologo     /Fe:haversine_generator_debug || exit /b 1
 cl %part2_dir%\haversine_generator.c /W4 /WX /Z7 /nologo /O2 /Fe:haversine_generator_release || exit /b 1
 
+cl %part2_dir%\haversine_generator.c /DHAV_PROFILER /W4 /WX /Z7 /nologo     /Fe:haversine_generator_profiled_debug || exit /b 1
+cl %part2_dir%\haversine_generator.c /DHAV_PROFILER /W4 /WX /Z7 /nologo /O2 /Fe:haversine_generator_profiled_release || exit /b 1
+
 cl %part2_dir%\haversine.c /W4 /WX /Z7 /nologo     /Fe:haversine_debug || exit /b 1
 cl %part2_dir%\haversine.c /W4 /WX /Z7 /nologo /O2 /Fe:haversine_release || exit /b 1
+
+cl %part2_dir%\haversine.c /DHAV_PROFILER /W4 /WX /Z7 /nologo     /Fe:haversine_profiled_debug || exit /b 1
+cl %part2_dir%\haversine.c /DHAV_PROFILER /W4 /WX /Z7 /nologo /O2 /Fe:haversine_profiled_release || exit /b 1
 
 cl %part2_dir%\listing_0071_os_timer_main.cpp /W4 /WX /Z7 /O2 /nologo /Fe:listing_0071_os_timer_main_release || exit /b 1
 cl %part2_dir%\listing_0072_cpu_timer_main.cpp /W4 /WX /Z7 /O2 /nologo /Fe:listing_0072_cpu_timer_main_release || exit /b 1
