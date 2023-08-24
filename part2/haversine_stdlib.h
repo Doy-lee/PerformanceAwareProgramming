@@ -60,6 +60,41 @@ HAV_Str8BinarySplitResult HAV_Str8_BinarySplit(HAV_Str8 buffer, HAV_Str8 find);
 bool                      HAV_CharIsWhiteSpace(char ch);
 bool                      HAV_CharIsDigit(char ch);
 
+// NOTE: Profiler
+// ============================================================================
+typedef struct HAV_ProfilerAnchor {
+    HAV_Str8 label;
+    u64      elapsed_tsc_exclusive; // Does not include children
+    u64      elapsed_tsc_inclusive; // Includes children
+    u64      byte_count;
+    u64      hits;
+} HAV_ProfilerAnchor;
+
+typedef struct HAV_Profiler {
+    HAV_ProfilerAnchor anchors[4096];
+    u64                begin_tsc;
+    u64                end_tsc;
+    u64                parent_index;
+} HAV_Profiler;
+
+typedef struct HAV_ProfilerZone {
+    u64      parent_index;
+    uint32_t index;
+    HAV_Str8 label;
+    u64      elapsed_tsc_inclusive;
+    u64      tsc;
+    u64      byte_count;
+} HAV_ProfilerZone;
+
+static HAV_Profiler g_profiler;
+
+#define HAV_Profiler_BeginZone(label) HAV_Profiler_BeginZone_(HAV_STR8(label), __COUNTER__ + 1, 0)
+#define HAV_Profiler_BeginZoneBandwidth(label, byte_count) HAV_Profiler_BeginZone_(HAV_STR8(label), __COUNTER__ + 1, byte_count)
+
+static void HAV_Profiler_Dump();
+static HAV_ProfilerZone HAV_Profiler_BeginZone_(HAV_Str8 label, uint32_t index, u64 byte_count);
+static void HAV_Profiler_EndZone(HAV_ProfilerZone zone);
+
 // NOTE: PCG32
 // ============================================================================
 // NOTE: PCG RNG from Demetri Spanos: https://github.com/demetri/scribbles

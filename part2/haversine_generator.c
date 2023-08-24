@@ -3,10 +3,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <Windows.h>
-#include "haversine_stdlib.h"
-#include "haversine_stdlib.c"
 #include <math.h>
+
+#include "haversine_stdlib.h"
+#include "listing_0074_platform_metrics.cpp"
 #include "listing_0065_haversine_formula.cpp"
+#include "haversine_stdlib.c"
 
 #define PRINT_USAGE HAV_PrintLnFmt("Usage: %s [uniform/cluster] [random seed] [number of coordinate pairs to generate]", argv[0])
 int main(int argc, char **argv)

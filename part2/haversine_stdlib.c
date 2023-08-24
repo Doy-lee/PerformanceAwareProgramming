@@ -55,6 +55,73 @@ bool HAV_CharIsDigit(char ch)
     return result;
 }
 
+void HAV_Profiler_Dump()
+{
+    u64 total_elapsed_tsc = g_profiler.end_tsc - g_profiler.begin_tsc;
+    u64 cpu_frequency = EstimateCPUTimerFreq();
+    if (cpu_frequency)
+        printf("\nTotal time: %0.4fms (CPU freq %llu)\n", 1000.0 * (f64)total_elapsed_tsc / (f64)cpu_frequency, cpu_frequency);
+
+    for (uint32_t index = 1; index < HAV_ARRAY_UCOUNT(g_profiler.anchors); index++) {
+        HAV_ProfilerAnchor const *anchor = g_profiler.anchors + index;
+        if (!anchor->elapsed_tsc_inclusive)
+            break;
+
+        f64 percent = total_elapsed_tsc ? (f64)anchor->elapsed_tsc_exclusive / (f64)total_elapsed_tsc * 100.0 : 100.0;
+        printf("   %.*s[%zu]: %llu (%.2f%%", HAV_STR8_FMT(anchor->label), anchor->hits, anchor->elapsed_tsc_exclusive, percent);
+        if (anchor->elapsed_tsc_inclusive != anchor->elapsed_tsc_exclusive) {
+            f64 percent_w_children = total_elapsed_tsc ? ((f64)anchor->elapsed_tsc_inclusive / (f64)total_elapsed_tsc * 100.0) : 100.0;
+            printf(", %.2f%% w/children", percent_w_children);
+        }
+        printf(")");
+
+        if (anchor->byte_count) {
+            f64 megabytes_processed = anchor->byte_count / (1024.f * 1024.f);
+            f64 elapsed_s           = anchor->elapsed_tsc_inclusive / HAV_CAST(f64)cpu_frequency;
+            f64 bytes_per_s         = anchor->byte_count / elapsed_s;
+            f64 gigabytes_bandwidth = bytes_per_s / (1024.f * 1024.f * 1024.f);
+            printf("  %.3fmb at %.2fgb/s", megabytes_processed, gigabytes_bandwidth);
+        }
+        printf("\n");
+    }
+}
+
+HAV_ProfilerZone HAV_Profiler_BeginZone_(HAV_Str8 label, uint32_t index, u64 byte_count)
+{
+    HAV_ProfilerZone result      = {0};
+    #if defined(HAV_PROFILER)
+    result.index                 = index;
+    result.label                 = label;
+    result.tsc                   = ReadCPUTimer();
+    result.elapsed_tsc_inclusive = g_profiler.anchors[index].elapsed_tsc_inclusive;
+    result.byte_count            = byte_count;
+    result.parent_index          = g_profiler.parent_index;
+    g_profiler.parent_index      = index;
+    #else
+    (void)label; (void)index; (void)byte_count;
+    #endif
+    return result;
+}
+
+void HAV_Profiler_EndZone(HAV_ProfilerZone zone)
+{
+    #if defined(HAV_PROFILER)
+    u64 elapsed_tsc             = ReadCPUTimer() - zone.tsc;
+    HAV_ProfilerAnchor* anchor  = g_profiler.anchors + zone.index;
+    HAV_ProfilerAnchor* parent  = g_profiler.anchors + zone.parent_index;
+
+    anchor->elapsed_tsc_exclusive += elapsed_tsc;
+    anchor->elapsed_tsc_inclusive  = zone.elapsed_tsc_inclusive + elapsed_tsc;
+    anchor->label                  = zone.label;
+    anchor->byte_count            += zone.byte_count;
+    anchor->hits++;
+    parent->elapsed_tsc_exclusive -= elapsed_tsc;
+    g_profiler.parent_index        = zone.parent_index;
+    #else
+    (void)zone;
+    #endif
+}
+
 #pragma warning(push)
 #pragma warning(disable: 4146) // warning C4146: unary minus operator applied to unsigned type, result still unsigned
 uint32_t HAV_PCG32_Pie (uint64_t *state)
@@ -152,6 +219,7 @@ HAV_Buffer HAV_FileRead(char const *file_path)
     // NOTE: Read file to buffer
     // =========================================================================
     DWORD bytes_read = 0;
+    HAV_ProfilerZone prof_file_read_zone = HAV_Profiler_BeginZoneBandwidth("File Read", file_size);
     BOOL read_file_result = ReadFile(
       /*HANDLE       hFile*/ file_handle,
       /*LPVOID       lpBuffer*/ buffer,
@@ -159,6 +227,7 @@ HAV_Buffer HAV_FileRead(char const *file_path)
       /*LPDWORD      lpNumberOfBytesRead*/ &bytes_read,
       /*LPOVERLAPPED lpOverlapped*/ NULL
     );
+    HAV_Profiler_EndZone(prof_file_read_zone);
 
     // NOTE: Handle read result
     // =========================================================================
