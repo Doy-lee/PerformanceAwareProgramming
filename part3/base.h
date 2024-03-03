@@ -21,6 +21,9 @@
 
 typedef float f32;
 typedef double f64;
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
 typedef uint64_t u64;
 
 // NOTE: Globals ///////////////////////////////////////////////////////////////////////////////////
@@ -47,7 +50,7 @@ typedef struct Str8BinarySplitResult {
     Str8 rhs;
 } Str8BinarySplitResult;
 
-#define STR8(string) (Str8){.data = (string), .size = ARRAY_UCOUNT(string) - 1 }
+#define STR8(string) (Str8){.data = (char *)(string), .size = ARRAY_UCOUNT(string) - 1 }
 #define STR8_FMT(string) (int)((string).size), (string).data
 
 bool                  Str8_Equals(Str8 lhs, Str8 rhs);
