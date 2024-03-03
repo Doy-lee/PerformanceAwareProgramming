@@ -35,8 +35,8 @@ nasm %part1_build_dir_listing_0037%_disassembled.asm
 fc /B %part1_build_dir_listing_0037% %part1_build_dir_listing_0037%_disassembled || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0038/listing_0038_many_register_mov
-set part1_build_dir_listing_0038/%part1_build_dir%\%listing_0038%
+set listing_0038=listing_0038_many_register_mov
+set part1_build_dir_listing_0038=%part1_build_dir%\%listing_0038%
 
 copy /Y %part1_dir%\%listing_0038% %part1_build_dir% 1>NUL
 
@@ -45,8 +45,8 @@ nasm %part1_build_dir_listing_0038%_disassembled.asm
 fc /B %part1_build_dir_listing_0038% %part1_build_dir_listing_0038%_disassembled || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0039/listing_0039_more_movs
-set part1_build_dir_listing_0039/%part1_build_dir%\%listing_0039%
+set listing_0039=listing_0039_more_movs
+set part1_build_dir_listing_0039=%part1_build_dir%\%listing_0039%
 
 copy /Y %part1_dir%\%listing_0039% %part1_build_dir% 1>NUL
 
@@ -55,8 +55,8 @@ nasm %part1_build_dir_listing_0039%_disassembled.asm
 fc /B %part1_build_dir_listing_0039% %part1_build_dir_listing_0039%_disassembled || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0040/listing_0040_challenge_movs
-set part1_build_dir_listing_0040/%part1_build_dir%\%listing_0040%
+set listing_0040=listing_0040_challenge_movs
+set part1_build_dir_listing_0040=%part1_build_dir%\%listing_0040%
 
 copy /Y %part1_dir%\%listing_0040% %part1_build_dir% 1>NUL
 
@@ -65,8 +65,8 @@ nasm %part1_build_dir_listing_0040%_disassembled.asm
 fc /B %part1_build_dir_listing_0040% %part1_build_dir_listing_0040%_disassembled || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0041/listing_0041_add_sub_cmp_jnz
-set part1_build_dir_listing_0041/%part1_build_dir%\%listing_0041%
+set listing_0041=listing_0041_add_sub_cmp_jnz
+set part1_build_dir_listing_0041=%part1_build_dir%\%listing_0041%
 
 copy /Y %part1_dir%\%listing_0041% %part1_build_dir% 1>NUL
 
@@ -75,8 +75,8 @@ nasm %part1_build_dir_listing_0041%_disassembled.asm
 fc /B %part1_build_dir_listing_0041% %part1_build_dir_listing_0041%_disassembled || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0042/listing_0042_completionist_decode
-set part1_build_dir_listing_0042/%part1_build_dir%\%listing_0042%
+set listing_0042=listing_0042_completionist_decode
+set part1_build_dir_listing_0042=%part1_build_dir%\%listing_0042%
 
 copy /Y %part1_dir%\%listing_0042% %part1_build_dir% 1>NUL
 
@@ -85,8 +85,8 @@ nasm %part1_build_dir_listing_0042%_disassembled.asm
 fc /B %part1_build_dir_listing_0042% %part1_build_dir_listing_0042%_disassembled || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0043/listing_0043_immediate_movs
-set part1_build_dir_listing_0043/%part1_build_dir%\%listing_0043%
+set listing_0043=listing_0043_immediate_movs
+set part1_build_dir_listing_0043=%part1_build_dir%\%listing_0043%
 
 copy /Y %part1_dir%\%listing_0043% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0043%.txt %part1_build_dir% 1>NUL
@@ -100,8 +100,8 @@ fc /B %part1_build_dir_listing_0043%     %part1_build_dir_listing_0043%_disassem
 fc /N %part1_build_dir_listing_0043%.txt %part1_build_dir_listing_0043%_disassembled.txt || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0044/listing_0044_register_movs
-set part1_build_dir_listing_0044/%part1_build_dir%\%listing_0044%
+set listing_0044=listing_0044_register_movs
+set part1_build_dir_listing_0044=%part1_build_dir%\%listing_0044%
 
 copy /Y %part1_dir%\%listing_0044% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0044%.txt %part1_build_dir% 1>NUL
@@ -115,8 +115,8 @@ fc /B %part1_build_dir_listing_0044%     %part1_build_dir_listing_0044%_disassem
 fc /N %part1_build_dir_listing_0044%.txt %part1_build_dir_listing_0044%_disassembled.txt || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0045/listing_0045_challenge_register_movs
-set part1_build_dir_listing_0045/%part1_build_dir%\%listing_0045%
+set listing_0045=listing_0045_challenge_register_movs
+set part1_build_dir_listing_0045=%part1_build_dir%\%listing_0045%
 
 copy /Y %part1_dir%\%listing_0045% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0045%.txt %part1_build_dir% 1>NUL
@@ -130,8 +130,8 @@ fc /B %part1_build_dir_listing_0045%     %part1_build_dir_listing_0045%_disassem
 fc /N %part1_build_dir_listing_0045%.txt %part1_build_dir_listing_0045%_disassembled.txt || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0046/listing_0046_add_sub_cmp
-set part1_build_dir_listing_0046/%part1_build_dir%\%listing_0046%
+set listing_0046=listing_0046_add_sub_cmp
+set part1_build_dir_listing_0046=%part1_build_dir%\%listing_0046%
 
 copy /Y %part1_dir%\%listing_0046% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0046%.txt %part1_build_dir% 1>NUL
@@ -145,8 +145,8 @@ fc /B %part1_build_dir_listing_0046%     %part1_build_dir_listing_0046%_disassem
 fc /N %part1_build_dir_listing_0046%.txt %part1_build_dir_listing_0046%_disassembled.txt || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0047/listing_0047_challenge_flags
-set part1_build_dir_listing_0047/%part1_build_dir%\%listing_0047%
+set listing_0047=listing_0047_challenge_flags
+set part1_build_dir_listing_0047=%part1_build_dir%\%listing_0047%
 
 copy /Y %part1_dir%\%listing_0047% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0047%.txt %part1_build_dir% 1>NUL
@@ -160,8 +160,8 @@ fc /B %part1_build_dir_listing_0047%     %part1_build_dir_listing_0047%_disassem
 fc /N %part1_build_dir_listing_0047%.txt %part1_build_dir_listing_0047%_disassembled.txt || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0048/listing_0048_ip_register
-set part1_build_dir_listing_0048/%part1_build_dir%\%listing_0048%
+set listing_0048=listing_0048_ip_register
+set part1_build_dir_listing_0048=%part1_build_dir%\%listing_0048%
 
 copy /Y %part1_dir%\%listing_0048% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0048%.txt %part1_build_dir% 1>NUL
@@ -175,8 +175,8 @@ fc /B %part1_build_dir_listing_0048%     %part1_build_dir_listing_0048%_disassem
 fc /N %part1_build_dir_listing_0048%.txt %part1_build_dir_listing_0048%_disassembled.txt || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0049/listing_0049_conditional_jumps
-set part1_build_dir_listing_0049/%part1_build_dir%\%listing_0049%
+set listing_0049=listing_0049_conditional_jumps
+set part1_build_dir_listing_0049=%part1_build_dir%\%listing_0049%
 
 copy /Y %part1_dir%\%listing_0049% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0049%.txt %part1_build_dir% 1>NUL
@@ -190,8 +190,8 @@ fc /B %part1_build_dir_listing_0049%     %part1_build_dir_listing_0049%_disassem
 fc /N %part1_build_dir_listing_0049%.txt %part1_build_dir_listing_0049%_disassembled.txt || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0050/listing_0050_challenge_jumps
-set part1_build_dir_listing_0050/%part1_build_dir%\%listing_0050%
+set listing_0050=listing_0050_challenge_jumps
+set part1_build_dir_listing_0050=%part1_build_dir%\%listing_0050%
 
 copy /Y %part1_dir%\%listing_0050% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0050%.txt %part1_build_dir% 1>NUL
@@ -205,8 +205,8 @@ fc /B %part1_build_dir_listing_0050%     %part1_build_dir_listing_0050%_disassem
 fc /N %part1_build_dir_listing_0050%.txt %part1_build_dir_listing_0050%_disassembled.txt || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0051/listing_0051_memory_mov
-set part1_build_dir_listing_0051/%part1_build_dir%\%listing_0051%
+set listing_0051=listing_0051_memory_mov
+set part1_build_dir_listing_0051=%part1_build_dir%\%listing_0051%
 
 copy /Y %part1_dir%\%listing_0051% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0051%.txt %part1_build_dir% 1>NUL
@@ -220,8 +220,8 @@ fc /B %part1_build_dir_listing_0051%     %part1_build_dir_listing_0051%_disassem
 fc /N %part1_build_dir_listing_0051%.txt %part1_build_dir_listing_0051%_disassembled.txt || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0052/listing_0052_memory_add_loop
-set part1_build_dir_listing_0052/%part1_build_dir%\%listing_0052%
+set listing_0052=listing_0052_memory_add_loop
+set part1_build_dir_listing_0052=%part1_build_dir%\%listing_0052%
 
 copy /Y %part1_dir%\%listing_0052% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0052%.txt %part1_build_dir% 1>NUL
@@ -235,8 +235,8 @@ fc /B %part1_build_dir_listing_0052%     %part1_build_dir_listing_0052%_disassem
 fc /N %part1_build_dir_listing_0052%.txt %part1_build_dir_listing_0052%_disassembled.txt || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0053/listing_0053_add_loop_challenge
-set part1_build_dir_listing_0053/%part1_build_dir%\%listing_0053%
+set listing_0053=listing_0053_add_loop_challenge
+set part1_build_dir_listing_0053=%part1_build_dir%\%listing_0053%
 
 copy /Y %part1_dir%\%listing_0053% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0053%.txt %part1_build_dir% 1>NUL
@@ -250,8 +250,8 @@ fc /B %part1_build_dir_listing_0053%     %part1_build_dir_listing_0053%_disassem
 fc /N %part1_build_dir_listing_0053%.txt %part1_build_dir_listing_0053%_disassembled.txt || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0054/listing_0054_draw_rectangle
-set part1_build_dir_listing_0054/%part1_build_dir%\%listing_0054%
+set listing_0054=listing_0054_draw_rectangle
+set part1_build_dir_listing_0054=%part1_build_dir%\%listing_0054%
 
 copy /Y %part1_dir%\%listing_0054% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0054%.txt %part1_build_dir% 1>NUL
@@ -267,8 +267,8 @@ fc /B %part1_build_dir_listing_0054%     %part1_build_dir_listing_0054%_disassem
 fc /N %part1_build_dir_listing_0054%.txt %part1_build_dir_listing_0054%_disassembled.txt || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0055/listing_0055_challenge_rectangle
-set part1_build_dir_listing_0055/%part1_build_dir%\%listing_0055%
+set listing_0055=listing_0055_challenge_rectangle
+set part1_build_dir_listing_0055=%part1_build_dir%\%listing_0055%
 
 copy /Y %part1_dir%\%listing_0055% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0055%.txt %part1_build_dir% 1>NUL
@@ -284,8 +284,8 @@ fc /B %part1_build_dir_listing_0055%     %part1_build_dir_listing_0055%_disassem
 fc /N %part1_build_dir_listing_0055%.txt %part1_build_dir_listing_0055%_disassembled.txt || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0056/listing_0056_estimating_cycles
-set part1_build_dir_listing_0056/%part1_build_dir%\%listing_0056%
+set listing_0056=listing_0056_estimating_cycles
+set part1_build_dir_listing_0056=%part1_build_dir%\%listing_0056%
 
 copy /Y %part1_dir%\%listing_0056% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0056%.txt %part1_build_dir% 1>NUL
@@ -302,8 +302,8 @@ fc /B %part1_build_dir_listing_0056%     %part1_build_dir_listing_0056%_disassem
 fc /N %part1_build_dir_listing_0056%.txt %part1_build_dir_listing_0056%_disassembled.txt || exit /b 1
 
 REM ////////////////////////////////////////////////////////////////////////////////////////////////
-set listing_0057/listing_0057_challenge_cycles
-set part1_build_dir_listing_0057/%part1_build_dir%\%listing_0057%
+set listing_0057=listing_0057_challenge_cycles
+set part1_build_dir_listing_0057=%part1_build_dir%\%listing_0057%
 
 copy /Y %part1_dir%\%listing_0057% %part1_build_dir% 1>NUL
 copy /Y %part1_dir%\%listing_0057%.txt %part1_build_dir% 1>NUL
@@ -342,6 +342,7 @@ popd
 
 REM Part 3 /////////////////////////////////////////////////////////////////////////////////////////
 REM Build //////////////////////////////////////////////////////////////////////////////////////////
+:part3
 pushd %part3_build_dir%
 cl %part3_dir%\repetition_tester.c /W4 /WX /Z7 /nologo     /Fe:repetition_tester_debug   || exit /b 1
 cl %part3_dir%\repetition_tester.c /W4 /WX /Z7 /nologo /O2 /Fe:repetition_tester_release || exit /b 1
