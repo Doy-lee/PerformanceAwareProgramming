@@ -1,5 +1,4 @@
-// NOTE: Sim8086
-// ============================================================================
+// NOTE: Sim8086 ///////////////////////////////////////////////////////////////////////////////////
 typedef enum S86_OpDecodeType {
     S86_OpDecodeType_MOVRegOrMemToOrFromReg,
     S86_OpDecodeType_MOVImmediateToRegOrMem,

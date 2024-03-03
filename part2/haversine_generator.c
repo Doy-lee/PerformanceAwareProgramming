@@ -13,8 +13,7 @@
 #define PRINT_USAGE HAV_PrintLnFmt("Usage: %s [uniform/cluster] [random seed] [number of coordinate pairs to generate]", argv[0])
 int main(int argc, char **argv)
 {
-    // NOTE: Unit Tests
-    // =========================================================================
+    // NOTE: Unit Tests ////////////////////////////////////////////////////////////////////////////
     {
         {
             HAV_Str8ToU64Result result = HAV_Str8_ToU64(HAV_STR8("00"));
@@ -44,8 +43,7 @@ int main(int argc, char **argv)
         }
     }
 
-    // NOTE: Arg Parsing
-    // =========================================================================
+    // NOTE: Arg Parsing ///////////////////////////////////////////////////////////////////////////
     if (argc != 4) {
         PRINT_USAGE;
         return -1;
@@ -95,8 +93,7 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    // NOTE: Generator
-    // =========================================================================
+    // NOTE: Generator /////////////////////////////////////////////////////////////////////////////
     uint64_t point_count = number_of_coordinate_pairs_to_generate_u64_result.value;
     uint64_t random_seed = random_seed_u64_result.value;
     uint64_t rng_state   = random_seed;

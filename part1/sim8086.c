@@ -382,8 +382,7 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
     size_t op_code_size           = 0;
     op_code_bytes[op_code_size++] = S86_BufferIteratorNextByte(buffer_it);
 
-    // NOTE: Match the assembly bytes to the desired instruction
-    // =====================================================================
+    // NOTE: Match the assembly bytes to the desired instruction ///////////////////////////////////
     S86_OpDecodeType    op_decode_type = S86_OpDecodeType_Count;
     S86_OpDecode const *op_decode      = NULL;
     for (size_t op_index = 0;
@@ -392,13 +391,11 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
     {
         S86_OpDecode const *item = decode_table + op_index;
 
-        // NOTE: Check first instruction byte
-        // =================================================================
+        // NOTE: Check first instruction byte //////////////////////////////////////////////////////
         if ((op_code_bytes[0] & item->op_mask0) != item->op_bits0)
             continue;
 
-        // NOTE Check multi-byte instruction
-        // =================================================================
+        // NOTE Check multi-byte instruction ///////////////////////////////////////////////////////
         // If the matched instruction has a bit mask for the 2nd byte, this
         // is a multi-byte instruction. Check if the 2nd byte checks out.
         bool op_match = true;
@@ -418,8 +415,7 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
         }
     }
 
-    // NOTE: Disassemble bytes to assembly mnemonics
-    // =================================================================
+    // NOTE: Disassemble bytes to assembly mnemonics ///////////////////////////////////////////////
     S86_ASSERT(op_code_size > 0 && op_code_size <= S86_ARRAY_UCOUNT(op_code_bytes));
     S86_ASSERT(op_decode_type != S86_OpDecodeType_Count && "Unknown instruction");
 
@@ -677,8 +673,7 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
         case S86_OpDecodeType_ORImmediateToAccum:    /*FALLTHRU*/
         case S86_OpDecodeType_XORImmediateToAccum:   /*FALLTHRU*/
         case S86_OpDecodeType_MOVImmediateToReg: {
-            // NOTE: Parse opcode control bits
-            // =============================================================
+            // NOTE: Parse opcode control bits /////////////////////////////////////////////////////
             S86_ASSERT(op_code_size == 1);
             uint8_t w   = 0;
             if (op_decode_type == S86_OpDecodeType_ADDImmediateToAccum ||
@@ -695,16 +690,14 @@ S86_Opcode S86_DecodeOpcode(S86_BufferIterator *buffer_it,
                 w = (op_code_bytes[0] & 0b0000'1000) >> 3;
             }
 
-            // NOTE: Parse data payload
-            // =============================================================
+            // NOTE: Parse data payload ////////////////////////////////////////////////////////////
             uint16_t data = S86_BufferIteratorNextByte(buffer_it);
             if (w) { // 16 bit data
                 uint8_t data_hi = S86_BufferIteratorNextByte(buffer_it);
                 data |= (uint16_t)(data_hi) << 8;
             }
 
-            // NOTE: Disassemble
-            // =============================================================
+            // NOTE: Disassemble ///////////////////////////////////////////////////////////////////
             result.effective_addr = S86_EffectiveAddress_Dest;
             result.src            = S86_MnemonicOp_Immediate;
             result.wide           = w;
@@ -893,8 +886,7 @@ char const CLI_ARG_DUMP[]                = "--dump";
 
 int main(int argc, char **argv)
 {
-    // NOTE: Argument handling
-    // =========================================================================
+    // NOTE: Argument handling /////////////////////////////////////////////////////////////////////
     if (argc < 2) {
         PRINT_USAGE;
         return -1;
@@ -965,8 +957,7 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    // NOTE: Sim8086
-    // =========================================================================
+    // NOTE: Sim8086 ///////////////////////////////////////////////////////////////////////////////
     S86_OpDecode const DECODE_TABLE[] = {
         [S86_OpDecodeType_MOVRegOrMemToOrFromReg]       = {.op_mask0 = 0b1111'1100, .op_mask1 = 0b0000'0000,
                                                            .op_bits0 = 0b1000'1000, .op_bits1 = 0b0000'0000, .mnemonic = S86_Mnemonic_MOV},
@@ -1257,8 +1248,7 @@ int main(int argc, char **argv)
                                                            .op_bits0 = 0b0010'0110, .op_bits1 = 0b0000'0000, .mnemonic = S86_Mnemonic_SEGMENT},
     };
 
-    // NOTE: Decode assembly
-    // =========================================================================
+    // NOTE: Decode assembly ///////////////////////////////////////////////////////////////////////
     if (exec_mode) {
         if (log_cycle_counts != CycleCount_None) { // NOTE: Print disclaimer + header
             S86_PrintLn(S86_STR8("**************"));
@@ -1337,7 +1327,7 @@ int main(int argc, char **argv)
             continue;
         }
 
-        // NOTE: Simulate instruction ==============================================================
+        // NOTE: Simulate instruction //////////////////////////////////////////////////////////////
         bool cycle_count_8088             = log_cycle_counts == CycleCount_8088;
         uint32_t base_clocks              = 0;
         uint32_t effective_address_clocks = 0;
@@ -1800,7 +1790,7 @@ int main(int argc, char **argv)
 
         clocks_counter += base_clocks + effective_address_clocks + transfer_penalty_clocks;
 
-        // NOTE: Printing ==========================================================================
+        // NOTE: Printing //////////////////////////////////////////////////////////////////////////
         S86_PrintFmt(" ; ");
 
         // NOTE: Clocks
