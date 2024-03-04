@@ -9,41 +9,51 @@
 #include "base.h"
 #include "listing_0074_platform_metrics.cpp"
 #include "base.c"
+#include "repetition_tester.h"
 
-typedef enum RepTesterMode {
-    RepTesterMode_Nil,
-    RepTesterMode_Testing,
-    RepTesterMode_Error,
-    RepTesterMode_Complete,
-} RepTesterMode;
+// NOTE: Allocate //////////////////////////////////////////////////////////////////////////////////
+Str8 AllocTypeStr8(AllocType type)
+{
+    Str8 result = {};
+    switch (type) {
+        case AllocType_None:         result = STR8("Pre-Allocated"); break;
+        case AllocType_VirtualAlloc: result = STR8("VirtualAlloc"); break;
+        case AllocType_Malloc:       result = STR8("Malloc"); break;
+        case AllocType_Count: break;
+    }
+    return result;
+}
 
-typedef struct RepTesterResults {
-    u64 test_count;
-    u64 total_time;
-    u64 max_time;
-    u64 min_time;
-} RepTesterResults;
+void TestAlloc(ReadArgs *args, Buffer *buffer)
+{
+    switch (args->alloc_type) {
+        case AllocType_None: break;
+        case AllocType_VirtualAlloc: {
+            buffer->data = VirtualAlloc(/*LPVOID lpAddress*/        NULL,
+                                        /*SIZE_T dwSize*/           buffer->size,
+                                        /*DWORD  flAllocationType*/ MEM_COMMIT | MEM_RESERVE,
+                                        /*DWORD  flProtect*/        PAGE_READWRITE);
+        } break;
 
-typedef struct RepTester {
-    RepTesterMode    mode;
-    u32              open_block_count;
-    u32              close_block_count;
-    u64              cpu_timer_freq;
-    RepTesterResults results;
+        case AllocType_Malloc: {
+            buffer->data = malloc(buffer->size);
+        } break;
 
-    size_t           total_bytes_read;
-    size_t           desired_bytes_read;
+        case AllocType_Count: break;
+    }
+}
 
-    u64              time_accumulated_on_this_test;
-    u64              start_time;
-    u64              run_duration;
-} RepTester;
+void TestDealloc(ReadArgs *args, Buffer *buffer)
+{
+    switch (args->alloc_type) {
+        case AllocType_None:         break;
+        case AllocType_Malloc:       free(buffer->data); break;
+        case AllocType_VirtualAlloc: VirtualFree(buffer->data, 0, MEM_RELEASE); break;
+        case AllocType_Count:        break;
+    }
+}
 
-typedef struct ReadArgs {
-    Buffer dest;
-    Str8   file_name;
-} ReadArgs;
-
+// NOTE: RepTester /////////////////////////////////////////////////////////////////////////////////
 void RepTester_Error(RepTester *tester, Str8 msg)
 {
     tester->mode = RepTesterMode_Error;
@@ -108,21 +118,18 @@ bool RepTester_IsTesting(RepTester *tester)
                 RepTester_Error(tester, STR8("Processed byte count mismatch"));
 
             if (tester->mode == RepTesterMode_Testing) {
-                RepTesterResults *results      = &tester->results;
-                u64               elapsed_time = tester->time_accumulated_on_this_test;
-                results->test_count += 1;
-                results->total_time += elapsed_time;
-                results->max_time = MAX(results->max_time, elapsed_time);
+                RepTesterResults *results       = &tester->results;
+                u64               elapsed_time  = tester->time_accumulated_on_this_test;
+                results->test_count            += 1;
+                results->total_time            += elapsed_time;
+                results->max_time               = MAX(results->max_time, elapsed_time);
 
                 if (results->min_time > elapsed_time) {
                     results->min_time = elapsed_time;
 
                     // NOTE: Reset the trial time when new min time is achieved
                     tester->start_time = current_time;
-                    PrintTime(STR8("Min"),
-                              (f64)results->min_time,
-                              tester->cpu_timer_freq,
-                              tester->desired_bytes_read);
+                    PrintTime(STR8("Min"), (f64)results->min_time, tester->cpu_timer_freq, tester->desired_bytes_read);
                     printf("               \r");
                 }
 
@@ -145,20 +152,25 @@ bool RepTester_IsTesting(RepTester *tester)
     return result;
 }
 
+// NOTE: Read testing functions ////////////////////////////////////////////////////////////////////
 static void ReadWithFRead(RepTester *tester, ReadArgs *args)
 {
     while (RepTester_IsTesting(tester)) {
         FILE *file = fopen(args->file_name.data, "rb");
         if (file) {
+            Buffer buffer = args->dest;
+            TestAlloc(args, &buffer);
+
             RepTester_BeginTime(tester);
-            size_t result = fread(args->dest.data, args->dest.size, 1, file);
+            size_t result = fread(buffer.data, buffer.size, 1, file);
             RepTester_EndTime(tester);
 
             if (result == 1) {
-                RepTester_CountBytes(tester, args->dest.size);
+                RepTester_CountBytes(tester, buffer.size);
             } else {
                 RepTester_Error(tester, STR8("fopen failed"));
             }
+            TestDealloc(args, &buffer);
             fclose(file);
         } else {
             RepTester_Error(tester, STR8("fopen failed"));
@@ -171,8 +183,11 @@ static void ReadWithRead(RepTester *tester, ReadArgs *args)
     while (RepTester_IsTesting(tester)) {
         int file = _open(args->file_name.data, _O_BINARY | _O_RDONLY);
         if (file != -1) {
-            char *dest            = args->dest.data;
-            u64   space_remaining = args->dest.size;
+            Buffer buffer = args->dest;
+            TestAlloc(args, &buffer);
+
+            char *dest            = buffer.data;
+            u64   space_remaining = buffer.size;
             while (space_remaining) {
                 u32 read_size = UINT32_MAX;
                 if ((u64)read_size > space_remaining)
@@ -192,6 +207,8 @@ static void ReadWithRead(RepTester *tester, ReadArgs *args)
                 space_remaining -= read_size;
                 dest += read_size;
             }
+
+            TestDealloc(args, &buffer);
             _close(file);
         } else {
             RepTester_Error(tester, STR8("_open failed"));
@@ -202,16 +219,20 @@ static void ReadWithRead(RepTester *tester, ReadArgs *args)
 static void ReadWithReadFile(RepTester *tester, ReadArgs *args)
 {
     while (RepTester_IsTesting(tester)) {
-        HANDLE File = CreateFileA(args->file_name.data,
+        HANDLE file = CreateFileA(args->file_name.data,
                                   GENERIC_READ,
                                   FILE_SHARE_READ | FILE_SHARE_WRITE,
                                   0,
                                   OPEN_EXISTING,
                                   FILE_ATTRIBUTE_NORMAL,
                                   0);
-        if (File != INVALID_HANDLE_VALUE) {
-            char *dest            = args->dest.data;
-            u64   space_remaining = args->dest.size;
+
+        if (file != INVALID_HANDLE_VALUE) {
+            Buffer buffer = args->dest;
+            TestAlloc(args, &buffer);
+
+            char *dest            = buffer.data;
+            u64   space_remaining = buffer.size;
             while (space_remaining) {
                 u32 read_size = UINT32_MAX;
                 if ((u64)read_size > space_remaining)
@@ -219,7 +240,7 @@ static void ReadWithReadFile(RepTester *tester, ReadArgs *args)
 
                 DWORD bytes_read = 0;
                 RepTester_BeginTime(tester);
-                BOOL result = ReadFile(File, dest, read_size, &bytes_read, 0);
+                BOOL result = ReadFile(file, dest, read_size, &bytes_read, 0);
                 RepTester_EndTime(tester);
 
                 if (result && (bytes_read == read_size))
@@ -231,7 +252,8 @@ static void ReadWithReadFile(RepTester *tester, ReadArgs *args)
                 dest += read_size;
             }
 
-            CloseHandle(File);
+            TestDealloc(args, &buffer);
+            CloseHandle(file);
         } else {
             RepTester_Error(tester, STR8("CreateFileA failed"));
         }
@@ -246,8 +268,10 @@ typedef struct TestFunction {
 
 int main(int argc, char const **argv)
 {
-    if (argc != 2)
+    if (argc != 2) {
         fprintf(stderr, "Usage: %s [existing filename]\n", argv[0]);
+        return -1;
+    }
 
     Str8 file_name = {.data = CAST(char *) argv[0], .size = strlen(argv[0])};
     struct __stat64 stat;
@@ -274,33 +298,38 @@ int main(int argc, char const **argv)
         {STR8("ReadFile"), ReadWithReadFile},
     };
 
-    RepTester testers[ARRAY_UCOUNT(test_functions)] = {};
-    u64       cpu_timer_freq                        = EstimateCPUTimerFreq();
+    RepTester testers[ARRAY_UCOUNT(test_functions)][AllocType_Count] = {};
+    u64       cpu_timer_freq                                         = EstimateCPUTimerFreq();
     for (u64 index = 0; index != UINT64_MAX; index++) {
-        for (u32 func_index = 0; func_index < ARRAY_UCOUNT(testers); func_index++) {
-            RepTester   *tester    = testers + func_index;
-            TestFunction test_func = test_functions[func_index];
+        for (u64 func_index = 0; func_index < ARRAY_UCOUNT(testers); func_index++) {
+            for (u64 alloc_index = AllocType_VirtualAlloc; alloc_index < AllocType_Count; alloc_index++) {
+                RepTester   *tester    = &testers[func_index][alloc_index];
+                TestFunction test_func = test_functions[func_index];
 
-            printf("\n--- %.*s ---\n", STR8_FMT(test_func.name));
+                printf("\n--- %.*s + %.*s ---\n",
+                       STR8_FMT(AllocTypeStr8((AllocType)alloc_index)),
+                       STR8_FMT(test_func.name));
 
-            if (tester->mode == RepTesterMode_Nil) {
-                tester->mode               = RepTesterMode_Testing;
-                tester->desired_bytes_read = args.dest.size;
-                tester->cpu_timer_freq     = cpu_timer_freq;
-                tester->results.min_time   = (u64)-1;
-            } else if (tester->mode == RepTesterMode_Complete) {
-                tester->mode = RepTesterMode_Testing;
+                if (tester->mode == RepTesterMode_Nil) {
+                    tester->mode               = RepTesterMode_Testing;
+                    tester->desired_bytes_read = args.dest.size;
+                    tester->cpu_timer_freq     = cpu_timer_freq;
+                    tester->results.min_time   = (u64)-1;
+                } else if (tester->mode == RepTesterMode_Complete) {
+                    tester->mode = RepTesterMode_Testing;
 
-                if (tester->desired_bytes_read != args.dest.size)
-                    RepTester_Error(tester, STR8("desired_bytes_read changed"));
-                if (tester->cpu_timer_freq != cpu_timer_freq)
-                    RepTester_Error(tester, STR8("cpu frequency changed"));
+                    if (tester->desired_bytes_read != args.dest.size)
+                        RepTester_Error(tester, STR8("desired_bytes_read changed"));
+                    if (tester->cpu_timer_freq != cpu_timer_freq)
+                        RepTester_Error(tester, STR8("cpu frequency changed"));
+                }
+
+                tester->run_duration = /*seconds_to_try*/ 10 * cpu_timer_freq;
+                tester->start_time   = ReadCPUTimer();
+                args.alloc_type      = alloc_index;
+
+                test_func.func(tester, &args);
             }
-
-            tester->run_duration = /*seconds_to_try*/ 10 * cpu_timer_freq;
-            tester->start_time   = ReadCPUTimer();
-
-            test_func.func(tester, &args);
         }
     }
 
