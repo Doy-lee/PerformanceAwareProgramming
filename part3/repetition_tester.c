@@ -189,7 +189,7 @@ static void ReadWithRead(RepTester *tester, ReadArgs *args)
             char *dest            = buffer.data;
             u64   space_remaining = buffer.size;
             while (space_remaining) {
-                u32 read_size = UINT32_MAX;
+                u32 read_size = INT_MAX;
                 if ((u64)read_size > space_remaining)
                     read_size = (u32)space_remaining;
 
@@ -273,7 +273,7 @@ int main(int argc, char const **argv)
         return -1;
     }
 
-    Str8 file_name = {.data = CAST(char *) argv[0], .size = strlen(argv[0])};
+    Str8 file_name = {.data = CAST(char *) argv[1], .size = strlen(argv[1])};
     struct __stat64 stat;
     _stat64(file_name.data, &stat);
 
