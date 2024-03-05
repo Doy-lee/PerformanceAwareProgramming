@@ -5,11 +5,22 @@ typedef enum RepTesterMode {
     RepTesterMode_Complete,
 } RepTesterMode;
 
+typedef enum RepTesterValueType {
+    RepTesterValueType_TestCount,
+    RepTesterValueType_CPUTimer,
+    RepTesterValueType_MemPageFaults,
+    RepTesterValueType_ByteCount,
+    RepTesterValueType_Count,
+} RepTesterValueType;
+
+typedef struct RepTesterValue {
+    u64 e[RepTesterValueType_Count];
+} RepTesterValue;
+
 typedef struct RepTesterResults {
-    u64 test_count;
-    u64 total_time;
-    u64 max_time;
-    u64 min_time;
+    RepTesterValue total;
+    RepTesterValue max;
+    RepTesterValue min;
 } RepTesterResults;
 
 typedef struct RepTester {
@@ -17,12 +28,12 @@ typedef struct RepTester {
     u32              open_block_count;
     u32              close_block_count;
     u64              cpu_timer_freq;
-    RepTesterResults results;
 
-    size_t           total_bytes_read;
+    RepTesterResults results;
+    RepTesterValue   accumulated_on_this_test;
+
     size_t           desired_bytes_read;
 
-    u64              time_accumulated_on_this_test;
     u64              start_time;
     u64              run_duration;
 } RepTester;

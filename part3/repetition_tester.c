@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 
 #include "base.h"
-#include "listing_0074_platform_metrics.cpp"
+#include "listing_0108_platform_metrics.cpp"
 #include "base.c"
 #include "repetition_tester.h"
 
@@ -63,18 +63,20 @@ void RepTester_Error(RepTester *tester, Str8 msg)
 void RepTester_BeginTime(RepTester *tester)
 {
     tester->open_block_count++;
-    tester->time_accumulated_on_this_test -= ReadCPUTimer();
+    tester->accumulated_on_this_test.e[RepTesterValueType_CPUTimer] -= ReadCPUTimer();
+    tester->accumulated_on_this_test.e[RepTesterValueType_MemPageFaults] -= ReadOSPageFaultCount();
 }
 
 void RepTester_EndTime(RepTester *tester)
 {
     tester->close_block_count++;
-    tester->time_accumulated_on_this_test += ReadCPUTimer();
+    tester->accumulated_on_this_test.e[RepTesterValueType_CPUTimer] += ReadCPUTimer();
+    tester->accumulated_on_this_test.e[RepTesterValueType_MemPageFaults] += ReadOSPageFaultCount();
 }
 
 void RepTester_CountBytes(RepTester *tester, size_t bytes_read)
 {
-    tester->total_bytes_read += bytes_read;
+    tester->accumulated_on_this_test.e[RepTesterValueType_ByteCount] += bytes_read;
 }
 
 static void PrintTime(Str8 label, f64 cpu_time, u64 cpu_timer_freq, u64 byte_count)
@@ -92,18 +94,42 @@ static void PrintTime(Str8 label, f64 cpu_time, u64 cpu_timer_freq, u64 byte_cou
     }
 }
 
-static void RepTester_PrintResult(RepTesterResults results, u64 cpu_timer_freq, u64 byte_count)
+static void RepTester_PrintValue(Str8 label, RepTesterValue value, u64 cpu_timer_freq)
 {
-    PrintTime(STR8("Min"), (f64)results.min_time, cpu_timer_freq, byte_count);
-    printf("\n");
+    u64 test_count = value.e[RepTesterValueType_TestCount];
+    f64 divisor    = test_count ? (f64)test_count : 1;
 
-    PrintTime(STR8("Max"), (f64)results.max_time, cpu_timer_freq, byte_count);
-    printf("\n");
+    f64 avg_values[ARRAY_UCOUNT(value.e)];
+    for (u64 index = 0; index < ARRAY_UCOUNT(value.e); index++)
+        avg_values[index] = value.e[index] / divisor;
 
-    if (results.test_count) {
-        PrintTime(STR8("Avg"), (f64)results.total_time / (f64)results.test_count, cpu_timer_freq, byte_count);
-        printf("\n");
+    printf("%.*s: %.0f", STR8_FMT(label), avg_values[RepTesterValueType_CPUTimer]);
+    if (cpu_timer_freq) {
+        f64 seconds = avg_values[RepTesterValueType_CPUTimer] / cpu_timer_freq;
+        printf(" (%fms)", 1000.0f*seconds);
+
+        if (avg_values[RepTesterValueType_ByteCount] > 0) {
+            f64 gigabyte  = (1024.0f * 1024.0f * 1024.0f);
+            f64 bandwidth = avg_values[RepTesterValueType_ByteCount] / (gigabyte * seconds);
+            printf(" %fgb/s", bandwidth);
+        }
     }
+
+    if(avg_values[RepTesterValueType_MemPageFaults] > 0) {
+        printf(" PF: %0.4f (%0.4fk/fault)",
+               avg_values[RepTesterValueType_MemPageFaults],
+               avg_values[RepTesterValueType_ByteCount] / (avg_values[RepTesterValueType_MemPageFaults] * 1024.0));
+    }
+}
+
+static void RepTester_PrintResult(RepTesterResults results, u64 cpu_timer_freq)
+{
+    RepTester_PrintValue(STR8("Min"), results.min, cpu_timer_freq);
+    printf("\n");
+    RepTester_PrintValue(STR8("Max"), results.max, cpu_timer_freq);
+    printf("\n");
+    RepTester_PrintValue(STR8("Avg"), results.total, cpu_timer_freq);
+    printf("\n");
 }
 
 bool RepTester_IsTesting(RepTester *tester)
@@ -114,29 +140,34 @@ bool RepTester_IsTesting(RepTester *tester)
             if (tester->open_block_count != tester->close_block_count)
                 RepTester_Error(tester, STR8("Unbalanced begin/end time"));
 
-            if (tester->total_bytes_read != tester->desired_bytes_read)
+            RepTesterValue accum = tester->accumulated_on_this_test;
+            if (accum.e[RepTesterValueType_ByteCount] != tester->desired_bytes_read)
                 RepTester_Error(tester, STR8("Processed byte count mismatch"));
 
             if (tester->mode == RepTesterMode_Testing) {
-                RepTesterResults *results       = &tester->results;
-                u64               elapsed_time  = tester->time_accumulated_on_this_test;
-                results->test_count            += 1;
-                results->total_time            += elapsed_time;
-                results->max_time               = MAX(results->max_time, elapsed_time);
+                RepTesterResults *results = &tester->results;
+                accum.e[RepTesterValueType_TestCount] = 1;
 
-                if (results->min_time > elapsed_time) {
-                    results->min_time = elapsed_time;
+                for (u64 index = 0; index < ARRAY_UCOUNT(accum.e); index++) {
+                    results->total.e[index] += accum.e[index];
+                }
+
+                if (results->max.e[RepTesterValueType_CPUTimer] < accum.e[RepTesterValueType_CPUTimer]) {
+                    results->max = accum;
+                }
+
+                if (results->min.e[RepTesterValueType_CPUTimer] > accum.e[RepTesterValueType_CPUTimer]) {
+                    results->min = accum;
 
                     // NOTE: Reset the trial time when new min time is achieved
                     tester->start_time = current_time;
-                    PrintTime(STR8("Min"), (f64)results->min_time, tester->cpu_timer_freq, tester->desired_bytes_read);
-                    printf("               \r");
+                    RepTester_PrintValue(STR8("Min"), results->min, tester->cpu_timer_freq);
+                    printf("                                                  \r");
                 }
 
-                tester->open_block_count              = 0;
-                tester->close_block_count             = 0;
-                tester->time_accumulated_on_this_test = 0;
-                tester->total_bytes_read              = 0;
+                tester->open_block_count         = 0;
+                tester->close_block_count        = 0;
+                tester->accumulated_on_this_test = (RepTesterValue){};
             }
         }
 
@@ -144,7 +175,7 @@ bool RepTester_IsTesting(RepTester *tester)
             tester->mode = RepTesterMode_Complete;
 
             printf("                                                          \r");
-            RepTester_PrintResult(tester->results, tester->cpu_timer_freq, tester->desired_bytes_read);
+            RepTester_PrintResult(tester->results, tester->cpu_timer_freq);
         }
     }
 
@@ -260,6 +291,20 @@ static void ReadWithReadFile(RepTester *tester, ReadArgs *args)
     }
 }
 
+static void WriteToAllBytes(RepTester *tester, ReadArgs *args)
+{
+    while (RepTester_IsTesting(tester)) {
+        Buffer buffer = args->dest;
+        TestAlloc(args, &buffer);
+        RepTester_BeginTime(tester);
+        for (u64 index = 0; index < buffer.size; index++)
+            buffer.data[index] = (u8)index;
+        RepTester_EndTime(tester);
+        RepTester_CountBytes(tester, buffer.size);
+        TestDealloc(args, &buffer);
+    }
+}
+
 typedef void TestFuncPtr(RepTester *tester, ReadArgs *args);
 typedef struct TestFunction {
     Str8         name;
@@ -292,17 +337,20 @@ int main(int argc, char const **argv)
         return -1;
     }
 
+    InitializeOSMetrics();
+
     TestFunction test_functions[] = {
-        {STR8("fread"),    ReadWithFRead},
-        {STR8("_read"),    ReadWithRead},
-        {STR8("ReadFile"), ReadWithReadFile},
+        {STR8("WriteToAllBytes"), WriteToAllBytes},
+        {STR8("fread"),           ReadWithFRead},
+        {STR8("_read"),           ReadWithRead},
+        {STR8("ReadFile"),        ReadWithReadFile},
     };
 
     RepTester testers[ARRAY_UCOUNT(test_functions)][AllocType_Count] = {};
     u64       cpu_timer_freq                                         = EstimateCPUTimerFreq();
     for (u64 index = 0; index != UINT64_MAX; index++) {
         for (u64 func_index = 0; func_index < ARRAY_UCOUNT(testers); func_index++) {
-            for (u64 alloc_index = AllocType_VirtualAlloc; alloc_index < AllocType_Count; alloc_index++) {
+            for (u64 alloc_index = 0; alloc_index < AllocType_Count; alloc_index++) {
                 RepTester   *tester    = &testers[func_index][alloc_index];
                 TestFunction test_func = test_functions[func_index];
 
@@ -311,10 +359,10 @@ int main(int argc, char const **argv)
                        STR8_FMT(test_func.name));
 
                 if (tester->mode == RepTesterMode_Nil) {
-                    tester->mode               = RepTesterMode_Testing;
-                    tester->desired_bytes_read = args.dest.size;
-                    tester->cpu_timer_freq     = cpu_timer_freq;
-                    tester->results.min_time   = (u64)-1;
+                    tester->mode                                       = RepTesterMode_Testing;
+                    tester->desired_bytes_read                         = args.dest.size;
+                    tester->cpu_timer_freq                             = cpu_timer_freq;
+                    tester->results.min.e[RepTesterValueType_CPUTimer] = (u64)-1;
                 } else if (tester->mode == RepTesterMode_Complete) {
                     tester->mode = RepTesterMode_Testing;
 
